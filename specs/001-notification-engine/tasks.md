@@ -281,7 +281,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
 
 ### Tests for User Story 1 ⚠️ (write first)
 
-- [ ] T035 [P] [US1] Write in-memory port fakes in `internal/app/fakes_test.go`: a repository
+- [X] T035 [P] [US1] Write in-memory port fakes in `internal/app/fakes_test.go`: a repository
   that enforces guarded transitions via `domain.CanTransition`, a fake clock, a recording
   publisher, a scriptable provider, a counting limiter, a scriptable breaker, and a recording
   broadcaster.
