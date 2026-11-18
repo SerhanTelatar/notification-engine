@@ -253,7 +253,7 @@ needs.
   - `/metrics` via promhttp on the injected registry
   - `/swagger` (embedded HTML, Swagger UI from a pinned CDN version) and `/openapi.yaml`
     (embedded `api/openapi.yaml`)
-- [ ] T033 Wire `cmd/api/main.go`:
+- [X] T033 Wire `cmd/api/main.go`:
   - `serve` (default) and `migrate` subcommands
   - config → logger → pgx pool → metrics → health (postgres required) → server
   - graceful shutdown: `Shutdown`, then close the pool (R17)
