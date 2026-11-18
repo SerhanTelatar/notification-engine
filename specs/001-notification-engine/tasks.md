@@ -383,7 +383,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
     1 KB; sets `data-model.md notifications.sent_at`/`failed_at`
   - the reaper methods
   - makes T041 pass
-- [ ] T049 [US1] Implement `internal/app/create.go` (`CreateNotification`):
+- [X] T049 [US1] Implement `internal/app/create.go` (`CreateNotification`):
   - validate via the domain
   - build the aggregate with `IDGenerator`/`Clock`
   - persist the correlation id (`data-model.md notifications.correlation_id`)
