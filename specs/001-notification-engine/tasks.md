@@ -314,7 +314,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - lock not acquired → channel skipped
   - publish failure → tx rolled back and rows stay due
   - rows picked in `priority DESC, next_attempt_at` order
-- [ ] T040 [P] [US1] Write unit tests for the reaper in `internal/app/reaper_test.go` (R5):
+- [X] T040 [P] [US1] Write unit tests for the reaper in `internal/app/reaper_test.go` (R5):
   - stale `sending` → `retrying` with an `abandoned` attempt and attempts+1
   - stale `sending` at max attempts → `failed`
   - stale `queued` → republished with no status change
