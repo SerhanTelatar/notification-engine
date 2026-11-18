@@ -832,7 +832,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
     with `template_id` → 400
   - a batch item that uses a template
 
-- [ ] T103 [P] [US8] Write unit tests for the template use cases in
+- [X] T103 [P] [US8] Write unit tests for the template use cases in
   `internal/app/templates_test.go`:
   - create derives sorted variables; a duplicate name → `ErrTemplateNameTaken`
   - create-by-template renders the content, rejects missing variables (all named), rejects
