@@ -42,3 +42,17 @@ when T098 is done; this file is then deleted.
     pool, and add 5% headroom. Measured peak 96–98. See ADR 0004.
   - **Lesson**: measure the limit where the spec measures it (at the provider), not where the
     code enforces it.
+
+## Trade-offs
+
+- **Rate-limit headroom: `RATE_LIMIT_HEADROOM=0.05` (kept deliberately).**
+  - **What it does**: slots are spaced 5% wider than `1s / RATE_LIMIT_PER_SECOND`. At a limit of
+    100 that's about 95 deliveries/s per channel, still inside SC-003's 90–100 band.
+  - **Gain**: at 100/s a slot is only 10 ms, so a few milliseconds of CPU or network jitter
+    between a slot and the provider adds an extra arrival to a sliding second. Measured on the
+    compose stack, the peak at the provider was 101–103 without headroom and 96–98 with it.
+    Headroom raises the jitter needed to break the limit from about 10 ms to about 50 ms.
+  - **Cost**: about 5% of throughput, and every call also waits `RATE_LIMIT_SEND_OFFSET` (50 ms)
+    after its slot.
+  - **Alternative**: `0` gives exact spacing; it held at 20/s in the integration tests, but not
+    on a loaded host at 100/s. See ADR 0004.
