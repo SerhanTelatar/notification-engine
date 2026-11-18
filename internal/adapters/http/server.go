@@ -4,7 +4,6 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -42,6 +41,7 @@ type Deps struct {
 	Batcher   *app.Batcher
 	Canceller *app.Canceller
 	Templates *app.Templates
+	Summary   *app.Summary
 	// Metrics, when set, counts created and rejected notifications.
 	Metrics *metrics.API
 }
@@ -55,6 +55,7 @@ type Server struct {
 	batch     *app.Batcher
 	cancel    *app.Canceller
 	templates *app.Templates
+	summary   *app.Summary
 	metrics   *metrics.API
 }
 
@@ -62,7 +63,7 @@ var _ gen.StrictServerInterface = (*Server)(nil)
 
 // NewServer returns the strict-server implementation.
 func NewServer(d Deps) *Server {
-	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher, cancel: d.Canceller, templates: d.Templates, metrics: d.Metrics}
+	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher, cancel: d.Canceller, templates: d.Templates, summary: d.Summary, metrics: d.Metrics}
 }
 
 // NewRouter mounts the generated routes on chi.
@@ -105,7 +106,3 @@ func NewHTTPServer(addr string, h http.Handler) *http.Server {
 }
 
 // --- Operations: each returns errNotImplemented until its user story lands. ---
-
-func (s *Server) GetMetricsSummary(context.Context, gen.GetMetricsSummaryRequestObject) (gen.GetMetricsSummaryResponseObject, error) {
-	return nil, errNotImplemented
-}

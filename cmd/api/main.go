@@ -101,6 +101,7 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker, Creator: creator,
 		Query:     query,
 		Templates: app.NewTemplates(app.TemplatesDeps{Repo: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: log}),
+		Summary:   app.NewSummary(app.SummaryDeps{Repo: postgres.NewSummaryRepo(pool), Clock: noop.Clock{}}),
 		Batcher:   batcher,
 		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(pool),
 			Events: events, Clock: noop.Clock{}, Log: log}),

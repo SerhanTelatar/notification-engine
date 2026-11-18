@@ -531,25 +531,35 @@ components:
         window_seconds: { type: integer, example: 300 }
         backlog:
           type: array
-          items:
-            type: object
-            properties:
-              channel: { $ref: '#/components/schemas/Channel' }
-              priority: { $ref: '#/components/schemas/Priority' }
-              status: { $ref: '#/components/schemas/Status' }
-              count: { type: integer }
+          items: { $ref: '#/components/schemas/SummaryBacklogEntry' }
         channels:
           type: array
-          items:
-            type: object
-            properties:
-              channel: { $ref: '#/components/schemas/Channel' }
-              sent: { type: integer }
-              failed: { type: integer }
-              retried: { type: integer }
-              success_rate: { type: number, format: double }
-              e2e_latency_ms: { $ref: '#/components/schemas/Percentiles' }
-              provider_latency_ms: { $ref: '#/components/schemas/Percentiles' }
+          items: { $ref: '#/components/schemas/SummaryChannel' }
+
+    SummaryBacklogEntry:
+      type: object
+      description: Non-terminal notifications right now, by channel, priority and status.
+      required: [channel, priority, status, count]
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        priority: { $ref: '#/components/schemas/Priority' }
+        status: { $ref: '#/components/schemas/Status' }
+        count: { type: integer }
+
+    SummaryChannel:
+      type: object
+      description: >
+        One channel over the window. success_rate is successful provider calls over finished
+        calls; it and the latency percentiles are absent when there is nothing to measure.
+      required: [channel, sent, failed, retried]
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        sent: { type: integer }
+        failed: { type: integer }
+        retried: { type: integer, description: Provider calls that led to a retry. }
+        success_rate: { type: number, format: double }
+        e2e_latency_ms: { $ref: '#/components/schemas/Percentiles' }
+        provider_latency_ms: { $ref: '#/components/schemas/Percentiles' }
 
     Percentiles:
       type: object

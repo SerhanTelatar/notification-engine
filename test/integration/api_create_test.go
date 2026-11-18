@@ -49,6 +49,7 @@ func apiHandler(quietLog *slog.Logger, opts ...httpapi.RouterOption) chi.Router 
 	srv := httpapi.NewServer(httpapi.Deps{Log: quietLog, Health: health.New(0), Creator: creator,
 		Query:     app.NewQuery(app.QueryDeps{Repo: repo}),
 		Templates: app.NewTemplates(app.TemplatesDeps{Repo: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: quietLog}),
+		Summary:   app.NewSummary(app.SummaryDeps{Repo: postgres.NewSummaryRepo(env.Pool), Clock: noop.Clock{}}),
 		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(env.Pool), Templates: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{},
 			Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5}),
 		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(env.Pool),
