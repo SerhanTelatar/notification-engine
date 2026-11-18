@@ -616,7 +616,7 @@ both times and never received; cancel a `sent` one → 409 with `current_status`
   notifications.cancelled_at`) and `CancelBatch` (`RETURNING id`, plus counts of the remaining
   statuses) to `sql/queries/notifications.sql`. Run `make gen` and implement them in
   `internal/adapters/postgres/notification_repo.go`.
-- [ ] T080 [US5] Implement `Cancel` and `CancelBatch` in `internal/app/cancel.go`:
+- [X] T080 [US5] Implement `Cancel` and `CancelBatch` in `internal/app/cancel.go`:
   - on 0 rows, read the row to decide 404 / 409 / idempotent 200
   - broadcast `cancelled` events
   - makes T077 pass
