@@ -423,7 +423,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - parse `messageId`; parse Retry-After
   - classify with `domain.Classify` (`contracts/provider.md`)
   - `provider_request_duration_seconds` histogram
-- [ ] T056 [US1] Implement `internal/app/deliver.go` (`Deliver` pipeline, R6):
+- [X] T056 [US1] Implement `internal/app/deliver.go` (`Deliver` pipeline, R6):
   - breaker check (port)
   - limiter permit (port; errors retried with backoff, fail closed). If no permit is obtained
     within `LIMITER_MAX_WAIT` (default 30 s), return a release result so the consumer does
