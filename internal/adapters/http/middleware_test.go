@@ -108,7 +108,7 @@ func TestTimeoutSetsDeadline(t *testing.T) {
 }
 
 func TestRouterAppliesMiddleware(t *testing.T) {
-	h := NewRouter(quiet, NewServer(quiet, health.New(0)))
+	h := NewRouter(quiet, NewServer(Deps{Log: quiet, Health: health.New(0)}))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/templates", nil))
 	if rec.Header().Get(HeaderCorrelationID) == "" {

@@ -66,7 +66,7 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	checker := health.New(health.DefaultTimeout).
 		Require("postgres", postgres.Ping(pool))
 
-	router := httpapi.NewRouter(log, httpapi.NewServer(log, checker))
+	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker}))
 	httpapi.MountOps(router, reg, api.Spec)
 	srv := httpapi.NewHTTPServer(cfg.HTTPAddr, router)
 

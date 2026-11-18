@@ -390,7 +390,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - resolve idempotency (R7)
   - broadcast a status event after commit
   - makes T037 pass
-- [ ] T050 [US1] Implement the `createNotification` handler in
+- [X] T050 [US1] Implement the `createNotification` handler in
   `internal/adapters/http/notifications.go`: map request ↔ domain, merge the `Idempotency-Key`
   header with the body field (mismatch → 400), set the `Idempotent-Replayed` header, return 202.
   Makes T042 pass.
