@@ -1,0 +1,21 @@
+# Prometheus for the compose observability profile (bonus, T118).
+# Targets come from Docker's embedded DNS, which returns every replica of a service, so
+# `docker compose up --scale worker=N` is scraped without config changes.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: api
+    dns_sd_configs:
+      - names: [api]
+        type: A
+        port: 8080
+        refresh_interval: 15s
+
+  - job_name: worker
+    dns_sd_configs:
+      - names: [worker]
+        type: A
+        port: 9090
+        refresh_interval: 15s
