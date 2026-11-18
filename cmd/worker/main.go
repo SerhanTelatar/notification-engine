@@ -70,7 +70,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer flushTraces(log, tr)
+	defer flushTraces(ctx, log, tr)
 
 	// --- Adapters -----------------------------------------------------------------------------
 	repo := postgres.NewNotificationRepo(pool)
@@ -165,8 +165,9 @@ func newOpsServer(addr string, checker *health.Checker, g prometheus.Gatherer) *
 }
 
 // flushTraces exports any buffered spans before the process exits.
-func flushTraces(log *slog.Logger, tr *tracing.Tracing) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// It runs after ctx is cancelled, so it detaches from it.
+func flushTraces(ctx context.Context, log *slog.Logger, tr *tracing.Tracing) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := tr.Shutdown(ctx); err != nil {
 		log.WarnContext(ctx, "flushing traces failed", "error", err)
