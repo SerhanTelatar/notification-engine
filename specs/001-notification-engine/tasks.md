@@ -363,7 +363,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - `Backoff(attempt, base, max, retryAfter, rnd)` with full jitter
   - `ShouldFail(attempts, maxAttempts)` (R9)
   - makes T036 pass
-- [ ] T047 [US1] Write `sql/queries/notifications.sql` and run `make gen`:
+- [X] T047 [US1] Write `sql/queries/notifications.sql` and run `make gen`:
   - `InsertNotification` (`ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`),
     `GetByIdempotencyKey`
   - `RelayTryLock` (`pg_try_advisory_xact_lock(hashtext('relay:'||$1))`), `CountQueued`,
