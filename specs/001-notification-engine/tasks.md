@@ -297,7 +297,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - same key + same hash → original returned with replayed=true
   - same key + different hash → `ErrIdempotencyConflict`
   - a status event is broadcast after commit
-- [ ] T038 [P] [US1] Write unit tests for the delivery use case in `internal/app/deliver_test.go`
+- [X] T038 [P] [US1] Write unit tests for the delivery use case in `internal/app/deliver_test.go`
   (R6):
   - guard 0 rows → ack without a provider call
   - success → `sent` with the message id
