@@ -36,9 +36,11 @@ type pipelineConfig struct {
 	queuedTimeout   time.Duration
 	backoffBase     time.Duration
 	backoffMax      time.Duration
-	limiter         ports.RateLimiter // nil = pass-through
-	limiterMaxWait  time.Duration     // 0 = 1 s
-	sendOffset      time.Duration     // pacing after the claim; 0 = none
+	limiter         ports.RateLimiter    // nil = pass-through
+	limiterMaxWait  time.Duration        // 0 = 1 s
+	sendOffset      time.Duration        // pacing after the claim; 0 = none
+	breaker         ports.CircuitBreaker // nil = pass-through
+	maxDeferAge     time.Duration        // BREAKER_MAX_DEFER_AGE; 0 = none
 }
 
 func defaultPipeline(providerURL string) pipelineConfig {
@@ -119,7 +121,7 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 
 	deliverer := app.NewDeliverer(app.DelivererDeps{
 		Repo: p.repo, Provider: provider.NewClient(cfg.providerURL, cfg.providerTimeout, nil),
-		Breaker: noop.Breaker{}, Limiter: limiterOrNoop(cfg.limiter), Events: noop.Broadcaster{}, Metrics: p.metrics,
+		Breaker: breakerOrNoop(cfg.breaker), Limiter: limiterOrNoop(cfg.limiter), MaxDeferAge: cfg.maxDeferAge, Events: noop.Broadcaster{}, Metrics: p.metrics,
 		Clock: noop.Clock{}, Log: quietLog, BackoffBase: cfg.backoffBase, BackoffMax: cfg.backoffMax,
 		LimiterMaxWait: durationOr(cfg.limiterMaxWait, time.Second), SendOffset: cfg.sendOffset,
 	})
@@ -164,6 +166,13 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 	}
 	t.Cleanup(p.stop)
 	return p
+}
+
+func breakerOrNoop(b ports.CircuitBreaker) ports.CircuitBreaker {
+	if b == nil {
+		return noop.Breaker{}
+	}
+	return b
 }
 
 func limiterOrNoop(l ports.RateLimiter) ports.RateLimiter {

@@ -691,7 +691,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   call, and `next_attempt_at` = now + remaining cool-down (FR-024, R5). A notification older than
   `BREAKER_MAX_DEFER_AGE`, measured from `max(created_at, scheduled_at)`, instead goes
   `sending → failed` with `last_error=provider_unavailable` and the dead-letter signal.
-- [ ] T088 [P] [US7] Write the breaker integration test in `test/integration/breaker_test.go`:
+- [X] T088 [P] [US7] Write the breaker integration test in `test/integration/breaker_test.go`:
   - 5 × 503 on sms → `circuit_breaker_state{channel="sms"}` = 2
   - sms `attempts` frozen while the breaker is open
   - email delivered normally throughout (SC-009)
