@@ -818,7 +818,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
 
 ### Tests for User Story 8 ⚠️
 
-- [ ] T101 [P] [US8] Write unit tests in `internal/domain/template_test.go`:
+- [X] T101 [P] [US8] Write unit tests in `internal/domain/template_test.go`:
   - fields-only parser: `{{.Name}}` OK; `{{range}}`, `{{if}}`, pipelines, function calls and
     nested templates rejected
   - the derived variables are sorted and unique
