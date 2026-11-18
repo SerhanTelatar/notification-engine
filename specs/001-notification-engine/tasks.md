@@ -397,7 +397,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
 - [X] T051 [P] [US1] Implement `internal/adapters/rabbitmq/topology.go`: idempotent declaration
   of the exchanges, queues (`x-max-priority=3`, DLX) and bindings exactly as in
   `contracts/events.md` §1.
-- [ ] T052 [US1] Implement the confirm publisher in `internal/adapters/rabbitmq/publisher.go`
+- [X] T052 [US1] Implement the confirm publisher in `internal/adapters/rabbitmq/publisher.go`
   (`ports.Publisher`):
   - persistent, priority (from `data-model.md notifications.priority`), `message_id`,
     `mandatory`
