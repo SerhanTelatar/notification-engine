@@ -114,7 +114,7 @@ needs.
 
 ### Domain (stdlib only)
 
-- [ ] T018 [P] Implement the value objects:
+- [X] T018 [P] Implement the value objects:
   - `Channel` in `internal/domain/channel.go` (`data-model.md notifications.channel`)
   - `Priority` in `internal/domain/priority.go` (`data-model.md notifications.priority`, high=3,
     normal=2, low=1, default normal)
