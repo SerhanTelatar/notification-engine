@@ -2,6 +2,7 @@ package rabbitmq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -72,7 +73,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			c.log.WarnContext(ctx, "consumer cancel failed", "error", err)
 		}
 	case amqpErr := <-closed:
-		runErr = fmt.Errorf("consumer channel for %s closed: %v", c.channel, amqpErr)
+		runErr = fmt.Errorf("consumer channel for %s closed: %w", c.channel, closeReason(amqpErr))
 	}
 	wg.Wait()
 	c.log.InfoContext(context.WithoutCancel(ctx), "consumer stopped")
@@ -124,4 +125,13 @@ func (c *Consumer) settle(ctx context.Context, d amqp.Delivery, decision ports.D
 		// The channel is gone: the broker requeues the message itself.
 		c.log.WarnContext(ctx, "settling delivery failed", "decision", decision.String(), "error", err)
 	}
+}
+
+// closeReason turns a channel-close notification into an error; a nil *amqp.Error means the
+// channel closed without a broker-reported reason.
+func closeReason(e *amqp.Error) error {
+	if e == nil {
+		return errors.New("closed without a reason")
+	}
+	return e
 }

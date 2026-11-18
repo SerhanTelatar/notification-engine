@@ -400,10 +400,10 @@ func TestRepoClaimWaitsForAnOpenRelayTransaction(t *testing.T) {
 	claimed := make(chan claim, 1)
 	var committedAt time.Time
 	_, err := repo.RelayTx(context.Background(), domain.ChannelSMS, time.Now(), func(int) int { return 10 },
-		func(context.Context, []domain.Notification) error {
+		func(ctx context.Context, _ []domain.Notification) error {
 			// The "message" overtakes the commit: claim from another connection now.
 			go func() {
-				_, ok, err := repo.StartSending(context.Background(), n.ID, time.Now())
+				_, ok, err := repo.StartSending(context.WithoutCancel(ctx), n.ID, time.Now())
 				claimed <- claim{ok, err, time.Now()}
 			}()
 			time.Sleep(300 * time.Millisecond) // the relay transaction stays open
@@ -427,9 +427,9 @@ func TestRepoClaimWaitsForAnOpenRelayTransaction(t *testing.T) {
 	// A rolled-back relay leaves the row due: the claim must then find nothing to claim.
 	m := mustCreate(t, repo, newNotification(t, domain.ChannelSMS, nil))
 	_, _ = repo.RelayTx(context.Background(), domain.ChannelSMS, time.Now(), func(int) int { return 10 },
-		func(context.Context, []domain.Notification) error {
+		func(ctx context.Context, _ []domain.Notification) error {
 			go func() {
-				_, ok, err := repo.StartSending(context.Background(), m.ID, time.Now())
+				_, ok, err := repo.StartSending(context.WithoutCancel(ctx), m.ID, time.Now())
 				claimed <- claim{ok, err, time.Now()}
 			}()
 			time.Sleep(200 * time.Millisecond)
