@@ -436,7 +436,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - returns ack / dead-letter to the consumer
   - broadcasts transitions
   - makes T038 pass
-- [ ] T057 [US1] Implement `internal/app/reaper.go` (`ReapStale` tick, R5): reap stale `sending`
+- [X] T057 [US1] Implement `internal/app/reaper.go` (`ReapStale` tick, R5): reap stale `sending`
   (an `abandoned` attempt via `data-model.md notification_attempts.outcome`) and republish stale
   `queued` via the `Publisher` port. Increment `reaper_recovered_total`. Makes T040 pass.
 - [ ] T058 [P] [US1] Implement the mock provider in `tools/mockprovider/main.go`:
