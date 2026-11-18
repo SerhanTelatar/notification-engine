@@ -292,6 +292,17 @@ paths:
           content:
             text/plain: { schema: { type: string } }
 
+  /openapi.yaml:
+    get:
+      tags: [ops-raw]
+      operationId: openapiSpec
+      summary: This contract, as served to clients and to /swagger
+      responses:
+        '200':
+          description: OpenAPI 3 document
+          content:
+            application/yaml: { schema: { type: string } }
+
   /swagger:
     get:
       tags: [ops-raw]

@@ -79,6 +79,18 @@ func NewAPI(reg prometheus.Registerer) *API {
 	return m
 }
 
+// HTTPRoute is one (route pattern, method, status code) label set of http_request_duration_seconds.
+type HTTPRoute struct{ Route, Method, Code string }
+
+// InitHTTP creates the latency series for routes at zero, so the first requests after startup
+// show up in increase()/rate() instead of being absorbed into the series' first scraped value.
+// Pass each operation's success code; other codes still appear on first use.
+func (m *API) InitHTTP(routes []HTTPRoute) {
+	for _, r := range routes {
+		m.HTTPRequestDuration.WithLabelValues(r.Route, r.Method, r.Code)
+	}
+}
+
 // Label values known up front. Series are pre-initialised so every contract metric appears on
 // /metrics from startup (at zero), not only after its first event, which dashboards and alerts
 // need.

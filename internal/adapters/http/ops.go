@@ -43,7 +43,7 @@ func toHealth(r health.Result) gen.Health {
 // MountOps adds the hand-mounted, non-generated routes (tag ops-raw in api/openapi.yaml):
 // Prometheus /metrics, Swagger UI at /swagger and the raw contract at /openapi.yaml.
 func MountOps(r chi.Router, g prometheus.Gatherer, spec []byte) {
-	r.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
+	r.Method(http.MethodGet, "/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
 	r.Get("/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write(spec)
