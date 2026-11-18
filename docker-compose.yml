@@ -30,7 +30,9 @@ services:
     ports:
       - "15672:15672" # management UI (guest/guest)
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # check_port_connectivity verifies the AMQP listener accepts connections; ping passes
+      # earlier, while the listener is still starting, and the worker would crash-loop.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 5s
       timeout: 5s
       retries: 30
