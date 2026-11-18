@@ -62,7 +62,7 @@ green.
   - run `make gen` to produce `internal/adapters/http/gen/api.gen.go`
 - [X] T007 [P] Create `sqlc.yaml`: engine postgresql, schema `migrations/`, queries
   `sql/queries/`, `sql_package: pgx/v5`, output `internal/adapters/postgres/sqlcgen` (R13).
-- [ ] T008 Create `docker-compose.yml`:
+- [X] T008 Create `docker-compose.yml`:
   - postgres:16, rabbitmq:3.13-management and redis:7, each with a healthcheck
   - a one-shot `migrate` service (`api migrate up`)
   - `api` and `worker` with `depends_on` conditions (`service_healthy` /
