@@ -783,7 +783,7 @@ any bonus work.
   - API curl examples, a configuration table (from `.env.example`), and how to run the tests
   - "what I'd do with more time"
   - (Constitution IX)
-- [ ] T099 Write `scripts/loadtest.sh` and a `make loadtest` target:
+- [X] T099 Write `scripts/loadtest.sh` and a `make loadtest` target:
   - vegeta in Docker (pinned image version) against the running `docker compose` stack
   - 10,000 `POST /api/v1/notifications` with valid, unique SMS payloads
   - report p50/p95/p99, and record the p95 with pass/fail against SC-001 (< 200 ms) in

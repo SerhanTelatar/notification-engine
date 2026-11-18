@@ -26,7 +26,7 @@ endif
 
 GENERATED := internal/adapters/http/gen internal/adapters/postgres/sqlcgen
 
-.PHONY: help gen gen-check build fmt lint test test-unit migrate up down logs demo-burst
+.PHONY: help gen gen-check build fmt lint test test-unit migrate up down logs demo-burst loadtest
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -72,3 +72,6 @@ logs: ## Follow api and worker logs
 
 demo-burst: ## Submit a 5,000-notification mixed-priority burst (quickstart #11)
 	./scripts/demo-burst.sh
+
+loadtest: ## SC-001 load check: 10,000 creates with vegeta against the running stack
+	./scripts/loadtest.sh
