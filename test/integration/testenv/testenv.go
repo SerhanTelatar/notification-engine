@@ -124,7 +124,7 @@ func (e *Env) Truncate(t testing.TB) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if _, err := e.Pool.Exec(ctx, `TRUNCATE notification_attempts, notifications, batches RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := e.Pool.Exec(ctx, `TRUNCATE notification_attempts, notifications, batches, templates RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 }

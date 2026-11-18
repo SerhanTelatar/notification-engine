@@ -818,13 +818,13 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
 
 ### Tests for User Story 8 ⚠️
 
-- [ ] T101 [P] [US8] Write unit tests in `internal/domain/template_test.go`:
+- [X] T101 [P] [US8] Write unit tests in `internal/domain/template_test.go`:
   - fields-only parser: `{{.Name}}` OK; `{{range}}`, `{{if}}`, pipelines, function calls and
     nested templates rejected
   - the derived variables are sorted and unique
   - render with missing variables lists all of them; extra variables are ignored
   - rendered content still goes through the channel limits
-- [ ] T102 [P] [US8] Write the template integration test in `test/integration/templates_test.go`:
+- [X] T102 [P] [US8] Write the template integration test in `test/integration/templates_test.go`:
   - create 201 / duplicate name 409 / bad syntax 400
   - GET by id and list
   - send by template → the provider receives the rendered content
@@ -832,7 +832,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
     with `template_id` → 400
   - a batch item that uses a template
 
-- [ ] T103 [P] [US8] Write unit tests for the template use cases in
+- [X] T103 [P] [US8] Write unit tests for the template use cases in
   `internal/app/templates_test.go`:
   - create derives sorted variables; a duplicate name → `ErrTemplateNameTaken`
   - create-by-template renders the content, rejects missing variables (all named), rejects
@@ -842,28 +842,28 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
 
 ### Implementation for User Story 8
 
-- [ ] T104 [US8] Write `migrations/00002_templates.sql`:
+- [X] T104 [US8] Write `migrations/00002_templates.sql`:
   - the `templates` table: `data-model.md templates.id`, `data-model.md templates.name` (UNIQUE,
     1–100), `data-model.md templates.body` (≤ 100,000), `data-model.md templates.variables`,
     `data-model.md templates.created_at`
   - add the FK on `data-model.md notifications.template_id`
-- [ ] T105 [US8] Implement `internal/domain/template.go`: `ParseTemplate(body)` walks the
+- [X] T105 [US8] Implement `internal/domain/template.go`: `ParseTemplate(body)` walks the
   `text/template/parse` tree allowing only text and `.Field` actions (R12); `Variables()`;
   `Render(vars)` with `missingkey=error` that returns every missing name as a `ValidationError`.
   Makes T101 pass.
-- [ ] T106 [US8] Write `sql/queries/templates.sql` (`InsertTemplate`, `GetTemplate`,
+- [X] T106 [US8] Write `sql/queries/templates.sql` (`InsertTemplate`, `GetTemplate`,
   `ListTemplates`), run `make gen`, and implement
   `internal/adapters/postgres/template_repo.go` (unique violation →
   `domain.ErrTemplateNameTaken`).
-- [ ] T107 [US8] Implement `internal/app/templates.go` (`CreateTemplate`, `GetTemplate`,
+- [X] T107 [US8] Implement `internal/app/templates.go` (`CreateTemplate`, `GetTemplate`,
   `ListTemplates`) and add template rendering to `internal/app/create.go` and
   `internal/app/batch.go`:
   - resolve the template, render, store the rendered content and `data-model.md
     notifications.template_vars`
   - the variables go into the payload hash
-- [ ] T108 [US8] Implement the `createTemplate`, `getTemplate` and `listTemplates` handlers in
+- [X] T108 [US8] Implement the `createTemplate`, `getTemplate` and `listTemplates` handlers in
   `internal/adapters/http/templates.go`. Makes T102 pass.
-- [ ] T109 [P] [US8] Write `specs/adr/0008-restricted-templates.md` from R12: fields-only
+- [X] T109 [P] [US8] Write `specs/adr/0008-restricted-templates.md` from R12: fields-only
   templates, naming every missing variable, injection and runaway-output risks, rendering at
   submission time.
 

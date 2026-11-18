@@ -77,14 +77,16 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	checker := health.ForAPI(health.DefaultTimeout, postgres.Ping(pool), redisadapter.Ping(rdb))
 
 	repo := postgres.NewNotificationRepo(pool)
+	templates := postgres.NewTemplateRepo(pool)
 	creator := app.NewCreator(app.CreatorDeps{
-		Repo: repo, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: log, MaxAttempts: cfg.MaxAttempts,
+		Repo: repo, Templates: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: log, MaxAttempts: cfg.MaxAttempts,
 		Events: noop.Broadcaster{}, // Redis fan-out arrives with US9
 	})
 
 	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker, Creator: creator,
-		Query: app.NewQuery(app.QueryDeps{Repo: repo}),
-		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(pool), IDs: noop.UUIDv7{}, Clock: noop.Clock{},
+		Query:     app.NewQuery(app.QueryDeps{Repo: repo}),
+		Templates: app.NewTemplates(app.TemplatesDeps{Repo: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: log}),
+		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(pool), Templates: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{},
 			Events: noop.Broadcaster{}, Log: log, MaxAttempts: cfg.MaxAttempts}),
 		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(pool),
 			Events: noop.Broadcaster{}, Clock: noop.Clock{}, Log: log}),

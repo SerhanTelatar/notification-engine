@@ -47,6 +47,7 @@ type BatchDetail struct {
 // BatcherDeps are the Batcher's collaborators.
 type BatcherDeps struct {
 	Repo        ports.BatchRepository
+	Templates   ports.TemplateRepository // nil: every template_id is unknown
 	IDs         ports.IDGenerator
 	Clock       ports.Clock
 	Events      ports.StatusBroadcaster
@@ -87,9 +88,14 @@ func (b *Batcher) CreateBatch(ctx context.Context, req BatchRequest) (BatchResul
 			all.Add(fmt.Sprintf("items[%d].%s", i, fe.Field), fe.Message)
 		}
 	}
+	templates := newTemplateCache(b.d.Templates) // one lookup per distinct template id
 	for i, item := range req.Items {
 		item.CorrelationID = req.CorrelationID
-		n, err := buildNotification(item, b.d.IDs.NewID(), now, b.d.MaxAttempts, &batchID)
+		tpl, err := templates.resolve(ctx, item)
+		if err != nil {
+			return BatchResult{}, fmt.Errorf("item %d: %w", i, err)
+		}
+		n, err := buildNotification(item, tpl, b.d.IDs.NewID(), now, b.d.MaxAttempts, &batchID)
 		if err != nil {
 			var v *domain.ValidationError
 			if !errors.As(err, &v) {

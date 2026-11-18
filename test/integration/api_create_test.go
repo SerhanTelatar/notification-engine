@@ -40,12 +40,14 @@ func newAPIWith(t testing.TB, quietLog *slog.Logger, opts ...httpapi.RouterOptio
 // apiHandler is the API router wired to the test database, the way cmd/api wires it.
 func apiHandler(quietLog *slog.Logger, opts ...httpapi.RouterOption) http.Handler {
 	repo := postgres.NewNotificationRepo(env.Pool)
+	templates := postgres.NewTemplateRepo(env.Pool)
 	creator := app.NewCreator(app.CreatorDeps{
-		Repo: repo, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5,
+		Repo: repo, Templates: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5,
 	})
 	srv := httpapi.NewServer(httpapi.Deps{Log: quietLog, Health: health.New(0), Creator: creator,
-		Query: app.NewQuery(app.QueryDeps{Repo: repo}),
-		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(env.Pool), IDs: noop.UUIDv7{}, Clock: noop.Clock{},
+		Query:     app.NewQuery(app.QueryDeps{Repo: repo}),
+		Templates: app.NewTemplates(app.TemplatesDeps{Repo: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: quietLog}),
+		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(env.Pool), Templates: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{},
 			Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5}),
 		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(env.Pool),
 			Events: noop.Broadcaster{}, Clock: noop.Clock{}, Log: quietLog})})
