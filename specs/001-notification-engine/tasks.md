@@ -163,7 +163,7 @@ needs.
 
 ### Persistence
 
-- [ ] T025 Write `migrations/00001_init.sql` (goose up/down). Create the `notifications`,
+- [X] T025 Write `migrations/00001_init.sql` (goose up/down). Create the `notifications`,
   `notification_attempts` and `batches` tables and all their indexes exactly as data-model.md
   defines them.
   - `notifications` columns, each with its CHECK/NOT NULL/UNIQUE/FK constraint:
