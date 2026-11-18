@@ -847,7 +847,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
     1–100), `data-model.md templates.body` (≤ 100,000), `data-model.md templates.variables`,
     `data-model.md templates.created_at`
   - add the FK on `data-model.md notifications.template_id`
-- [ ] T105 [US8] Implement `internal/domain/template.go`: `ParseTemplate(body)` walks the
+- [X] T105 [US8] Implement `internal/domain/template.go`: `ParseTemplate(body)` walks the
   `text/template/parse` tree allowing only text and `.Field` actions (R12); `Variables()`;
   `Render(vars)` with `missingkey=error` that returns every missing name as a `ValidationError`.
   Makes T101 pass.
