@@ -155,3 +155,20 @@ UPDATE notifications
 SET status = 'cancelled', cancelled_at = @now::timestamptz, updated_at = @now::timestamptz
 WHERE id = ANY(@ids::uuid[]) AND status IN ('pending', 'scheduled', 'queued', 'retrying')
 RETURNING *;
+
+-- ---------------------------------------------------------------------------------------------
+-- Listing (US6, FR-011): keyset pagination, newest first (research R13)
+-- ---------------------------------------------------------------------------------------------
+
+-- name: ListNotifications :many
+-- Optional filters are NULL when absent. The (created_at, id) row comparison continues strictly
+-- after the cursor, so rows inserted while a client pages can't shift later pages.
+SELECT * FROM notifications
+WHERE (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text)
+  AND (sqlc.narg(channel)::text IS NULL OR channel = sqlc.narg(channel)::text)
+  AND (sqlc.narg(from_ts)::timestamptz IS NULL OR created_at >= sqlc.narg(from_ts)::timestamptz)
+  AND (sqlc.narg(to_ts)::timestamptz IS NULL OR created_at < sqlc.narg(to_ts)::timestamptz)
+  AND (sqlc.narg(after_created_at)::timestamptz IS NULL
+       OR (created_at, id) < (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid))
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;

@@ -53,6 +53,33 @@ func (s *Server) GetNotification(ctx context.Context, req gen.GetNotificationReq
 	return gen.GetNotification200JSONResponse(toAPIDetail(d)), nil
 }
 
+// ListNotifications returns one page of notifications, newest first, with keyset pagination
+// (FR-011). Parameter problems are a 400 listing every invalid field.
+func (s *Server) ListNotifications(ctx context.Context, req gen.ListNotificationsRequestObject) (gen.ListNotificationsResponseObject, error) {
+	if s.query == nil {
+		return nil, errNotImplemented
+	}
+	p := req.Params
+	lr := app.ListRequest{From: p.From, To: p.To, Limit: p.Limit, Cursor: p.Cursor}
+	if p.Status != nil {
+		st := string(*p.Status)
+		lr.Status = &st
+	}
+	if p.Channel != nil {
+		ch := string(*p.Channel)
+		lr.Channel = &ch
+	}
+	res, err := s.query.List(ctx, lr)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler
+	}
+	items := make([]gen.Notification, len(res.Items))
+	for i := range res.Items {
+		items[i] = toAPINotification(&res.Items[i])
+	}
+	return gen.ListNotifications200JSONResponse(gen.NotificationPage{Items: items, NextCursor: res.NextCursor}), nil
+}
+
 // CancelNotification cancels one notification (FR-013): 200 with the cancelled notification
 // (also when it was already cancelled), 409 with current_status when it can't be, 404 when
 // unknown.

@@ -395,6 +395,86 @@ func (q *Queries) ListAttempts(ctx context.Context, notificationID uuid.UUID) ([
 	return items, nil
 }
 
+const listNotifications = `-- name: ListNotifications :many
+
+SELECT id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at FROM notifications
+WHERE ($1::text IS NULL OR status = $1::text)
+  AND ($2::text IS NULL OR channel = $2::text)
+  AND ($3::timestamptz IS NULL OR created_at >= $3::timestamptz)
+  AND ($4::timestamptz IS NULL OR created_at < $4::timestamptz)
+  AND ($5::timestamptz IS NULL
+       OR (created_at, id) < ($5::timestamptz, $6::uuid))
+ORDER BY created_at DESC, id DESC
+LIMIT $7
+`
+
+type ListNotificationsParams struct {
+	Status         *string
+	Channel        *string
+	FromTs         *time.Time
+	ToTs           *time.Time
+	AfterCreatedAt *time.Time
+	AfterID        *uuid.UUID
+	PageLimit      int32
+}
+
+// ---------------------------------------------------------------------------------------------
+// Listing (US6, FR-011): keyset pagination, newest first (research R13)
+// ---------------------------------------------------------------------------------------------
+// Optional filters are NULL when absent. The (created_at, id) row comparison continues strictly
+// after the cursor, so rows inserted while a client pages can't shift later pages.
+func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error) {
+	rows, err := q.db.Query(ctx, listNotifications,
+		arg.Status,
+		arg.Channel,
+		arg.FromTs,
+		arg.ToTs,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Notification{}
+	for rows.Next() {
+		var i Notification
+		if err := rows.Scan(
+			&i.ID,
+			&i.BatchID,
+			&i.IdempotencyKey,
+			&i.PayloadHash,
+			&i.Channel,
+			&i.Recipient,
+			&i.Content,
+			&i.Priority,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.NextAttemptAt,
+			&i.ScheduledAt,
+			&i.TemplateID,
+			&i.TemplateVars,
+			&i.ProviderMessageID,
+			&i.LastError,
+			&i.CorrelationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SentAt,
+			&i.CancelledAt,
+			&i.FailedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockBatchItems = `-- name: LockBatchItems :many
 SELECT id, status FROM notifications WHERE batch_id = $1 ORDER BY id FOR UPDATE
 `

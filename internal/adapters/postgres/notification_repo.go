@@ -370,11 +370,41 @@ func (r *NotificationRepo) Cancel(ctx context.Context, id string, at time.Time) 
 	return out, nil
 }
 
-// --- Arriving with later user stories ---------------------------------------------------------
-
-func (r *NotificationRepo) List(context.Context, ports.ListFilter) ([]domain.Notification, error) {
-	return nil, fmt.Errorf("list notifications (US6): %w", errNotYet)
+// List returns one keyset page, newest first (FR-011, research R13).
+func (r *NotificationRepo) List(ctx context.Context, f ports.ListFilter) ([]domain.Notification, error) {
+	p := sqlcgen.ListNotificationsParams{FromTs: f.From, ToTs: f.To, PageLimit: int32(min(max(f.Limit, 1), 1000))} //nolint:gosec // clamped
+	if f.Status != nil {
+		s := string(*f.Status)
+		p.Status = &s
+	}
+	if f.Channel != nil {
+		c := string(*f.Channel)
+		p.Channel = &c
+	}
+	if f.After != nil {
+		id, err := uuid.Parse(f.After.ID)
+		if err != nil {
+			return nil, fmt.Errorf("cursor id: %w", err)
+		}
+		at := f.After.CreatedAt
+		p.AfterCreatedAt, p.AfterID = &at, &id
+	}
+	rows, err := r.q.ListNotifications(ctx, p)
+	if err != nil {
+		return nil, translate(err, "list notifications")
+	}
+	out := make([]domain.Notification, 0, len(rows))
+	for _, row := range rows {
+		n, err := toDomain(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *n)
+	}
+	return out, nil
 }
+
+// --- Arriving with later user stories ---------------------------------------------------------
 
 func (r *NotificationRepo) BacklogCounts(context.Context) ([]ports.BacklogCount, error) {
 	return nil, fmt.Errorf("backlog counts (US7): %w", errNotYet)

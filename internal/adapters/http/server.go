@@ -88,10 +88,6 @@ func NewHTTPServer(addr string, h http.Handler) *http.Server {
 
 // --- Operations: each returns errNotImplemented until its user story lands. ---
 
-func (s *Server) ListNotifications(context.Context, gen.ListNotificationsRequestObject) (gen.ListNotificationsResponseObject, error) {
-	return nil, errNotImplemented
-}
-
 func (s *Server) CreateTemplate(context.Context, gen.CreateTemplateRequestObject) (gen.CreateTemplateResponseObject, error) {
 	return nil, errNotImplemented
 }
