@@ -42,6 +42,7 @@ func NewServer(log *slog.Logger) *Server { return &Server{log: log} }
 // NewRouter mounts the generated routes on chi.
 func NewRouter(log *slog.Logger, s gen.StrictServerInterface) chi.Router {
 	r := chi.NewRouter()
+	r.Use(Recover(log), CorrelationID, AccessLog(log), Timeout(RequestTimeout))
 	strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
 			writeJSONError(w, http.StatusBadRequest, "validation_failed", err.Error())

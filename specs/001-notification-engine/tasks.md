@@ -234,7 +234,7 @@ needs.
     a sentinel `errNotImplemented`, which the strict `ResponseErrorHandlerFunc` maps to 501 with
     code `internal` (501 isn't a declared response in `api/openapi.yaml`)
   - a 10 MiB body limit and the server timeouts from R15
-- [ ] T030 [P] Implement middleware in `internal/adapters/http/middleware.go`:
+- [X] T030 [P] Implement middleware in `internal/adapters/http/middleware.go`:
   - recover → 500 `internal`
   - correlation id: read `X-Correlation-ID` (≤ 128 chars) or generate UUIDv7, echo it, put it in
     ctx (FR-032)
