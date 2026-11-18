@@ -30,7 +30,8 @@ func newAPI(t testing.TB) *httptest.Server {
 	creator := app.NewCreator(app.CreatorDeps{
 		Repo: repo, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5,
 	})
-	srv := httpapi.NewServer(httpapi.Deps{Log: quietLog, Health: health.New(0), Creator: creator})
+	srv := httpapi.NewServer(httpapi.Deps{Log: quietLog, Health: health.New(0), Creator: creator,
+		Query: app.NewQuery(app.QueryDeps{Repo: repo})})
 	ts := httptest.NewServer(httpapi.NewRouter(quietLog, srv))
 	t.Cleanup(ts.Close)
 	return ts

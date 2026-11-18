@@ -74,7 +74,8 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 		Events: noop.Broadcaster{}, // Redis fan-out arrives with US9
 	})
 
-	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker, Creator: creator}))
+	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker, Creator: creator,
+		Query: app.NewQuery(app.QueryDeps{Repo: repo})}))
 	httpapi.MountOps(router, reg, api.Spec)
 	srv := httpapi.NewHTTPServer(cfg.HTTPAddr, router)
 

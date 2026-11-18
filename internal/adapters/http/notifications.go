@@ -60,6 +60,18 @@ func (s *Server) CreateNotification(ctx context.Context, req gen.CreateNotificat
 	return gen.CreateNotification202JSONResponse{Body: toAPINotification(res.Notification), Headers: headers}, nil
 }
 
+// GetNotification returns one notification with its attempt history (FR-009).
+func (s *Server) GetNotification(ctx context.Context, req gen.GetNotificationRequestObject) (gen.GetNotificationResponseObject, error) {
+	if s.query == nil {
+		return nil, errNotImplemented
+	}
+	d, err := s.query.GetNotification(ctx, req.Id.String())
+	if err != nil {
+		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler
+	}
+	return gen.GetNotification200JSONResponse(toAPIDetail(d)), nil
+}
+
 // mergeIdempotencyKey accepts the key from the Idempotency-Key header or the body field. Both are
 // allowed only when they're equal (research R7).
 func mergeIdempotencyKey(header, body *string) (*string, error) {
@@ -110,4 +122,25 @@ func toAPINotification(n *domain.Notification) gen.Notification {
 func parseUUID(s string) uuid.UUID {
 	u, _ := uuid.Parse(s)
 	return u
+}
+
+// toAPIDetail maps a notification plus its attempts to the NotificationDetail schema.
+func toAPIDetail(d app.NotificationDetail) gen.NotificationDetail {
+	n := toAPINotification(d.Notification)
+	out := gen.NotificationDetail{
+		Id: n.Id, BatchId: n.BatchId, Status: n.Status, Channel: n.Channel, Recipient: n.Recipient,
+		Content: d.Notification.Content, Priority: n.Priority, Attempts: n.Attempts, MaxAttempts: n.MaxAttempts,
+		ProviderMessageId: n.ProviderMessageId, LastError: n.LastError, TemplateId: n.TemplateId,
+		IdempotencyKey: n.IdempotencyKey, CorrelationId: n.CorrelationId, ScheduledAt: n.ScheduledAt,
+		CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, SentAt: n.SentAt,
+		AttemptHistory: make([]gen.Attempt, len(d.Attempts)),
+	}
+	for i, a := range d.Attempts {
+		finished, latency := a.FinishedAt, a.LatencyMS
+		out.AttemptHistory[i] = gen.Attempt{
+			AttemptNo: a.AttemptNo, StartedAt: a.StartedAt, FinishedAt: &finished, LatencyMs: &latency,
+			HttpStatus: a.HTTPStatus, Outcome: gen.AttemptOutcome(a.Outcome), Error: a.Error,
+		}
+	}
+	return out
 }

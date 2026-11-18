@@ -485,7 +485,7 @@ batch lookup (US2-AS3) is delivered with US4 in T076.
   `internal/adapters/postgres/notification_repo.go`.
 - [X] T064 [US2] Implement `GetNotification` in `internal/app/query.go`, returning the aggregate
   plus its attempts. Makes T061 pass.
-- [ ] T065 [US2] Implement the `getNotification` handler in
+- [X] T065 [US2] Implement the `getNotification` handler in
   `internal/adapters/http/notifications.go`, mapping to the `NotificationDetail` schema. Makes
   T062 pass.
 

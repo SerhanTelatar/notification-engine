@@ -37,6 +37,7 @@ type Deps struct {
 	Log     *slog.Logger
 	Health  *health.Checker
 	Creator *app.Creator
+	Query   *app.Query
 }
 
 // Server implements gen.StrictServerInterface. Operations not built yet return errNotImplemented.
@@ -44,13 +45,14 @@ type Server struct {
 	log    *slog.Logger
 	health *health.Checker
 	create *app.Creator
+	query  *app.Query
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
 // NewServer returns the strict-server implementation.
 func NewServer(d Deps) *Server {
-	return &Server{log: d.Log, health: d.Health, create: d.Creator}
+	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query}
 }
 
 // NewRouter mounts the generated routes on chi.
@@ -83,10 +85,6 @@ func NewHTTPServer(addr string, h http.Handler) *http.Server {
 // --- Operations: each returns errNotImplemented until its user story lands. ---
 
 func (s *Server) ListNotifications(context.Context, gen.ListNotificationsRequestObject) (gen.ListNotificationsResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) GetNotification(context.Context, gen.GetNotificationRequestObject) (gen.GetNotificationResponseObject, error) {
 	return nil, errNotImplemented
 }
 
