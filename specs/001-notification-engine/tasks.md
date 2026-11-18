@@ -524,7 +524,7 @@ items not early (quickstart #11).
 
 ### Implementation for User Story 3
 
-- [ ] T068 [US3] Implement the GCRA limiter:
+- [X] T068 [US3] Implement the GCRA limiter:
   - the Lua script in `internal/adapters/redis/gcra.lua`, embedded
   - `internal/adapters/redis/ratelimiter.go` (`ports.RateLimiter`)
   - key `ratelimit:{channel}`, emission interval `1s / RATE_LIMIT_PER_SECOND`, zero burst, Redis
