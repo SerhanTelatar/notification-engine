@@ -416,7 +416,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   `queued` events, increment `relay_published_total`/`relay_backpressure_skips_total`. Every per-row log line
   carries that row's `correlation_id`; tick-level lines carry a generated `tick_id`. Makes T039
   pass.
-- [ ] T055 [US1] Implement the provider client in `internal/adapters/provider/client.go`
+- [X] T055 [US1] Implement the provider client in `internal/adapters/provider/client.go`
   (`ports.Provider`):
   - POST `{to, channel, content}` with the `Idempotency-Key` and `X-Correlation-ID` headers
   - `PROVIDER_TIMEOUT`, no redirects, read at most 64 KiB
