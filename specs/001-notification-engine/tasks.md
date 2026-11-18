@@ -575,7 +575,7 @@ items not early (quickstart #11).
   - the batch row and bulk insert in one tx
   - re-select conflicting keys and compare hashes per item (`data-model.md
     notifications.idempotency_key`, `data-model.md notifications.batch_id`)
-- [ ] T075 [US4] Implement `CreateBatch` and `GetBatch` in `internal/app/batch.go`. Each accepted
+- [X] T075 [US4] Implement `CreateBatch` and `GetBatch` in `internal/app/batch.go`. Each accepted
   item inherits the request correlation id. Broadcast a created event per item. Makes T071 pass.
 - [ ] T076 [US4] Implement the `createBatch` and `getBatch` handlers in
   `internal/adapters/http/batches.go`, mapping to the `BatchCreateResult` and `BatchDetail`
