@@ -94,7 +94,7 @@ scope).
 
 | # | Principle | How this plan complies | Pre | Post |
 |---|-----------|------------------------|-----|------|
-| I | Spec-First | spec → plan → tasks. [contracts/openapi.yaml](./contracts/openapi.yaml) becomes `api/openapi.yaml`, and the strict server is generated from it. Six ADRs are planned (list below). | ✅ | ✅ |
+| I | Spec-First | spec → plan → tasks. [contracts/openapi.yaml](./contracts/openapi.yaml) becomes `api/openapi.yaml`, and the strict server is generated from it. Eight ADRs are planned (list below). | ✅ | ✅ |
 | II | Hexagonal (NON-NEGOTIABLE) | `internal/domain` imports only the stdlib (text/template/parse, net/mail and similar; no infrastructure). `internal/app` depends on `internal/ports` interfaces. Adapters implement the ports. Wiring is only in `cmd/*/main.go`. No globals; Prometheus collectors go on an injected registry. A `depguard` lint rule enforces the import direction. | ✅ | ✅ |
 | III | Reliability | The API writes only to the DB; the outbox relay publishes inside the transaction (R4). Idempotency comes from a unique key plus the status guard (R7). Every transition is a guarded `UPDATE … WHERE status = ANY(...)` (data-model). Provider, AMQP, Redis and DB calls all have timeouts; retries are capped; the terminal states are `sent`, `failed` (plus DLQ) and `cancelled`; the reaper covers crashes. | ✅ | ✅ |
 | IV | Observability | slog JSON with `correlation_id` everywhere. Metrics in [contracts/observability.md](./contracts/observability.md), with every latency as a histogram. Both binaries have `/healthz` and `/readyz`, and readiness checks real dependencies. | ✅ | ✅ |
@@ -114,6 +114,8 @@ scope).
 4. `0004-redis-gcra-rate-limiter.md` (R8)
 5. `0005-retry-backoff-and-circuit-breaker.md` (R9)
 6. `0006-keyset-pagination.md` (R13)
+7. `0007-realtime-fanout-via-redis-pubsub.md` (R11, written in US9)
+8. `0008-restricted-templates.md` (R12, written in US8)
 
 ## Reconciliation with the planning input (spec.md wins)
 
@@ -170,7 +172,8 @@ internal/
 │   └── errors.go               # ErrValidation (with field errors), ErrNotFound, ErrInvalidTransition, ErrIdempotencyConflict …
 ├── ports/                      # interfaces owned by app
 │   └── ports.go                # NotificationRepository, TemplateRepository, Publisher, Provider,
-│                               # RateLimiter, CircuitBreaker, StatusBroadcaster, Clock, IDGenerator
+│                               # RateLimiter, CircuitBreaker, StatusBroadcaster, MetricsRecorder,
+│                               # Clock, IDGenerator
 ├── app/                        # use cases; depend on domain + ports only
 │   ├── create.go batch.go cancel.go query.go templates.go
 │   ├── relay.go                # RelayDue (tick)
@@ -185,6 +188,7 @@ internal/
 │   ├── rabbitmq/               # topology, confirm publisher, consumer
 │   ├── redis/                  # GCRA limiter (Lua), status broadcaster/subscriber
 │   ├── provider/               # HTTP client, response classification, gobreaker wrapper
+│   ├── noop/                   # pass-through limiter/breaker/broadcaster/recorder until real adapters land
 │   └── ws/                     # hub: subscriptions by notification/batch id, backpressure
 └── platform/
     ├── config/                 # env parsing + defaults + validation
@@ -198,6 +202,8 @@ migrations/                     # goose SQL (embedded)
 sql/queries/                    # sqlc query files
 sqlc.yaml  oapi-codegen.yaml
 test/integration/               # testcontainers suites (build tag: integration)
+test/integration/testenv/       # shared container harness + scriptable mock provider
+scripts/                        # demo-burst.sh, loadtest.sh (vegeta in Docker)
 tools/mockprovider/             # mock provider binary + Dockerfile
 deploy/prometheus/ deploy/grafana/
 .github/workflows/ci.yml
@@ -225,7 +231,10 @@ API ──tx──► notifications(pending|scheduled)            ◄── canc
      RabbitMQ notifications.{sms,email,push} (x-max-priority=3)
                  │ consumer (20/channel/worker)
                  ├─ breaker open? → sending→retrying (no attempt) → ack
+                 │     held > BREAKER_MAX_DEFER_AGE (1h) ⇒ sending→failed
+                 │     (provider_unavailable) → DLQ
                  ├─ GCRA permit (Redis, 100/s/channel global)
+                 │     no permit within LIMITER_MAX_WAIT (30s) ⇒ nack(requeue), row stays queued
                  ├─ guarded queued→sending (0 rows ⇒ ack & drop)   ◄── atomic cancel check
                  ├─ provider POST (5s timeout, via breaker)
                  └─ tx: attempt row + sent | retrying(next_attempt_at=backoff) | failed → ack
@@ -237,6 +246,10 @@ status change ─► Redis PUBLISH ─► every API instance ─► WebSocket su
 ## Implementation phases
 
 These are the order for `/speckit-tasks` (Constitution VII: required features first).
+
+**Delivery workflow**: all work happens on branch `001-notification-engine`. Each phase of
+tasks.md ends with one PR into `main`, and that PR is merged only when CI is green
+(Constitution V, IX).
 
 - **A. Foundation**
   - module, Makefile, Dockerfile, compose, `.env.example`, config, logger, shutdown
@@ -261,6 +274,7 @@ These are the order for `/speckit-tasks` (Constitution VII: required features fi
   - failure-path integration tests
   - ADRs 0004–0006
   - README
+  - load check for SC-001 (`scripts/loadtest.sh`)
 - **D. Bonus (in order)**
   - scheduled-delivery tests (the behaviour already comes from `next_attempt_at`)
   - templates (US8)
@@ -284,14 +298,15 @@ These are the order for `/speckit-tasks` (Constitution VII: required features fi
 | Retry | backoff bounds, full jitter, Retry-After floor, max-attempts cut-off | 503 ×5 → failed + DLQ; 503 then 202 → sent with 2 attempts; 429 + Retry-After respected |
 | Permanent | classification table | 400 → failed, 1 attempt, breaker not tripped |
 | Timeout | — | mock latency 6 s → transient, attempt recorded |
-| Breaker | open path consumes no attempt | 5 × 503 on sms opens it; sms attempts frozen while open; email unaffected; recovers after cool-down |
-| Rate limit | GCRA maths with a fake clock | 2 worker instances, limit 20/s, 3 s: max in any sliding 1 s window ≤ 20 |
-| Priority | relay ordering | backlog of low items, then high: the high item is within the first `concurrency + batch` sends |
+| Breaker | open path consumes no attempt; past `BREAKER_MAX_DEFER_AGE` → `failed` (`provider_unavailable`) | 5 × 503 on sms opens it; sms attempts frozen while open; email unaffected; recovers after cool-down; max defer age 3 s → `failed` + DLQ |
+| Rate limit | limiter timeout → release result | 2 worker instances, limit 20/s, 3 s: max in any sliding 1 s window ≤ 20 and total ≥ 54 (≥ 90%); Redis down with `LIMITER_MAX_WAIT=2s` → nack(requeue), row stays `queued`, delivered after Redis returns |
+| Priority | relay ordering | backlog of low items, then high: the high item is within the first `concurrency × workers + RELAY_BATCH_SIZE` sends |
 | Scheduled | status chosen at create time | not sent before `scheduled_at`; sent within 5 s after |
 | Crash recovery | reaper decisions | stale `sending` → retrying with an abandoned attempt; stale `queued` republished; nothing lost after a worker restart |
 | Templates *(D)* | fields-only parser, missing-variables list, render + limits | 400 naming every missing variable |
 | WebSocket *(D)* | hub fan-out, overflow close | subscriber gets snapshot + transitions from a status change made by the worker |
-| Shutdown | — | SIGTERM during in-flight work → no message lost, rows end consistent |
+| Shutdown | — | worker SIGTERM during in-flight work → no message lost, rows end consistent; api SIGTERM during concurrent creates → each request is either 202 with a durable row or failed with no row |
+| Load (SC-001) | — | `scripts/loadtest.sh`: vegeta, 10k creates, p95 recorded in `checklists/validation.md` |
 
 ## Complexity Tracking
 

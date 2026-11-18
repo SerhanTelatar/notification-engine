@@ -43,3 +43,5 @@
   - past schedule time → deliver now
   - backoff/timeout/pause defaults
   - providing both content and a template id → rejected
+- 2026-11-18: spec approved by the user, with every default under Assumptions accepted as-is.
+  `/speckit-clarify` was skipped on purpose.

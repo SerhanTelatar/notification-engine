@@ -20,8 +20,9 @@ and checked on its own. Module path: `github.com/SerhanTelatar/notification-engi
 **Citations**: field constraints are canonical in data-model.md and cited as
 `data-model.md <table>.<column>`. Research decisions are cited as `R<n>`.
 
-**Commits**: one task ≈ one Conventional Commit (Constitution IX). CI (T009) must be green before
-each merge.
+**Commits**: one task ≈ one Conventional Commit (Constitution IX). All work happens on branch
+`001-notification-engine`. Each phase ends with one PR into `main`, merged only when CI (T009) is
+green.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -49,7 +50,7 @@ each merge.
   - `internal/app` and `internal/ports` must not import `internal/adapters` or
     `internal/platform` (plan, Constitution II)
 - [ ] T004 [P] Create `.env.example` listing every variable and default from R19, including
-  `RELAY_MAX_INFLIGHT_PER_CHANNEL=1000`.
+  `RELAY_MAX_INFLIGHT_PER_CHANNEL=1000`, `BREAKER_MAX_DEFER_AGE=1h` and `LIMITER_MAX_WAIT=30s`.
 - [ ] T005 [P] Create a multi-stage `Dockerfile` that builds `api`, `worker` and `mockprovider`
   into one distroless image; the binary is chosen by the container command (plan, Project
   Structure).
@@ -153,10 +154,11 @@ needs.
 - [ ] T023 Define every port in `internal/ports/ports.go`: `NotificationRepository`,
   `BatchRepository`, `TemplateRepository`, `Publisher`, `Provider` (returns a classified
   `domain.Outcome`, HTTP status, message id and Retry-After), `RateLimiter`, `CircuitBreaker`,
-  `StatusBroadcaster`, `Clock`, `IDGenerator`. Every I/O method takes `ctx` first.
+  `StatusBroadcaster`, `MetricsRecorder` (delivery outcomes, retries, dead-letters, e2e latency,
+  relay and reaper counters), `Clock`, `IDGenerator`. Every I/O method takes `ctx` first.
 - [ ] T024 [P] Implement pass-through adapters in `internal/adapters/noop/noop.go`: an
   always-allow `RateLimiter`, an always-closed `CircuitBreaker`, a discarding
-  `StatusBroadcaster`, a system `Clock`, and a UUIDv7 `IDGenerator` (`data-model.md
+  `StatusBroadcaster`, a discarding `MetricsRecorder`, a system `Clock`, and a UUIDv7 `IDGenerator` (`data-model.md
   notifications.id`, `google/uuid`). They're used until US3, US7 and US9 replace them.
 
 ### Persistence
@@ -178,7 +180,7 @@ needs.
     - `data-model.md notifications.max_attempts`
     - `data-model.md notifications.next_attempt_at`
     - `data-model.md notifications.scheduled_at`
-    - `data-model.md notifications.template_id` (column only; its FK is added in T101)
+    - `data-model.md notifications.template_id` (column only; its FK is added in T104)
     - `data-model.md notifications.template_vars`
     - `data-model.md notifications.provider_message_id`
     - `data-model.md notifications.last_error`
@@ -228,8 +230,9 @@ needs.
 
 - [ ] T029 Implement the HTTP server in `internal/adapters/http/server.go`:
   - chi router mounting the generated strict handler at `/`
-  - a `Server` struct that implements `gen.StrictServerInterface`, returning 501 `internal` for
-    operations not built yet
+  - a `Server` struct that implements `gen.StrictServerInterface`. Operations not built yet return
+    a sentinel `errNotImplemented`, which the strict `ResponseErrorHandlerFunc` maps to 501 with
+    code `internal` (501 isn't a declared response in `api/openapi.yaml`)
   - a 10 MiB body limit and the server timeouts from R15
 - [ ] T030 [P] Implement middleware in `internal/adapters/http/middleware.go`:
   - recover → 500 `internal`
@@ -303,6 +306,8 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - permanent → `failed` after 1 attempt
   - the limiter is called before the guarded `queued → sending`
   - an attempt row is written with the outcome
+  - no permit within `LIMITER_MAX_WAIT` → a release result (consumer `Nack(requeue=true)`); the row
+    stays `queued` and the provider isn't called
 - [ ] T039 [P] [US1] Write unit tests for the relay in `internal/app/relay_test.go` (R4):
   - `quota = min(batch, max_inflight − queued)` is never negative
   - quota ≤ 0 → channel skipped and the skip metric incremented
@@ -335,6 +340,8 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - 400 → `failed` with 1 attempt
   - mock latency 6 s → transient, attempt recorded
   - a 2xx with an unparsable body → `sent` with a null message id
+  - 20 concurrent creates with the same idempotency key → after draining, the mock received
+    exactly 1 call (SC-005)
 - [ ] T044 [P] [US1] Write the relay integration tests in `test/integration/relay_test.go`:
   - a publish that isn't confirmed (exchange deleted) → tx rolled back, rows still `pending`
   - backpressure: 5,000 SMS with `RELAY_MAX_INFLIGHT_PER_CHANNEL=1000` and 2 relays. The
@@ -406,7 +413,8 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - stops consuming on ctx cancel and waits for in-flight handlers (R17)
 - [ ] T054 [US1] Implement `internal/app/relay.go` (`RelayDue` tick): for each channel run
   `RelayTx` with the backpressure quota from R4, publish via the `Publisher` port, broadcast
-  `queued` events, increment `relay_published_total`/`relay_backpressure_skips_total`. Makes T039
+  `queued` events, increment `relay_published_total`/`relay_backpressure_skips_total`. Every per-row log line
+  carries that row's `correlation_id`; tick-level lines carry a generated `tick_id`. Makes T039
   pass.
 - [ ] T055 [US1] Implement the provider client in `internal/adapters/provider/client.go`
   (`ports.Provider`):
@@ -417,7 +425,9 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - `provider_request_duration_seconds` histogram
 - [ ] T056 [US1] Implement `internal/app/deliver.go` (`Deliver` pipeline, R6):
   - breaker check (port)
-  - limiter permit (port; errors retried with backoff, fail closed)
+  - limiter permit (port; errors retried with backoff, fail closed). If no permit is obtained
+    within `LIMITER_MAX_WAIT` (default 30 s), return a release result so the consumer does
+    `Nack(requeue=true)`; the row stays `queued` (R6). Record `rate_limiter_timeouts_total`.
   - guarded `StartSending` (0 rows → ack)
   - provider call through the breaker
   - `ApplyOutcome` with backoff (`data-model.md notifications.attempts`,
@@ -499,6 +509,10 @@ items not early (quickstart #11).
   - 2 limiter instances at 20/s for 3 s → at most 20 permits in any sliding 1 s window
   - per-channel keys are independent
   - Redis stopped → `Acquire` returns an error (fail closed)
+  - sustained backlog at 20/s for 3 s → at least 54 permits (≥ 90% of the limit; SC-003 lower
+    bound)
+  - Redis stopped with `LIMITER_MAX_WAIT=2s` → the consumer `Nack(requeue=true)`s the message, the
+    row stays `queued`, and it's delivered once Redis is back
   - also an end-to-end run through 2 worker instances checking the mock's timestamps (SC-003)
 - [ ] T067 [P] [US3] Write the priority and scheduling integration tests in
   `test/integration/priority_schedule_test.go`:
@@ -544,6 +558,7 @@ items not early (quickstart #11).
   - all invalid → `ValidationError` with `items[i].field` paths and no repository call
   - 0 or 1,001 items → error
   - duplicate idempotency keys inside the batch → later items resolve to the first item's id
+  - `GetBatch`: counts per status sum to the accepted total; unknown id → `ErrNotFound`
 - [ ] T072 [P] [US4] Write the batch integration test in `test/integration/api_batch_test.go`:
   - 7/3 partial; 1,000 valid acknowledged in < 2 s (SC-002)
   - 1,001 → 400; all invalid → 400 and no `batches` row
@@ -664,13 +679,17 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
 
 - [ ] T087 [P] [US7] Extend `internal/app/deliver_test.go` with the breaker-open path: the
   outcome is a `sending → retrying` deferral with `attempts` unchanged, no attempt row, no limiter
-  call, and `next_attempt_at` = now + remaining cool-down (FR-024, R5).
+  call, and `next_attempt_at` = now + remaining cool-down (FR-024, R5). A notification older than
+  `BREAKER_MAX_DEFER_AGE`, measured from `max(created_at, scheduled_at)`, instead goes
+  `sending → failed` with `last_error=provider_unavailable` and the dead-letter signal.
 - [ ] T088 [P] [US7] Write the breaker integration test in `test/integration/breaker_test.go`:
   - 5 × 503 on sms → `circuit_breaker_state{channel="sms"}` = 2
   - sms `attempts` frozen while the breaker is open
   - email delivered normally throughout (SC-009)
   - mock fixed → sms sent within one cool-down (test cool-down 2 s)
   - 400 responses never trip it
+  - with `BREAKER_MAX_DEFER_AGE=3s` and the mock still failing, an sms notification ends `failed`
+    with `last_error=provider_unavailable` and one message in `notifications.dlq`
 - [ ] T089 [P] [US7] Write the observability integration test in
   `test/integration/observability_test.go`:
   - capture slog output from the api and the worker → every line for a request with
@@ -681,29 +700,40 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
 - [ ] T090 [P] [US7] Write the shutdown integration test in `test/integration/shutdown_test.go`:
   cancel the worker root ctx while 50 sends are in flight (mock latency 500 ms) → each row ends
   either `sent` or `queued`, and after a restart all reach `sent` with no duplicate provider calls
-  for rows already `sent` (R17).
+  for rows already `sent` (R17). Also send SIGTERM to the api during 200 concurrent creates →
+  every request either got 202 with a durable row or failed with no row stored (SC-004,
+  US1-AS11).
+
+- [ ] T091 [P] [US7] Write unit tests for the backlog sampler in `internal/app/sampler_test.go`:
+  repository counts map to `notification_backlog{channel,priority,status}` gauge values via the
+  recorder fake; combinations that vanish are reset to 0; a broker-depth error doesn't stop the
+  DB-based gauges.
 
 ### Implementation for User Story 7
 
-- [ ] T091 [US7] Implement the per-channel breaker in `internal/adapters/provider/breaker.go`
+- [ ] T092 [US7] Implement the per-channel breaker in `internal/adapters/provider/breaker.go`
   (`ports.CircuitBreaker`) with `sony/gobreaker/v2`:
   - `ReadyToTrip` on `BREAKER_CONSECUTIVE_FAILURES` consecutive transient failures
   - `Timeout=BREAKER_COOLDOWN`, `MaxRequests=1`
   - `IsSuccessful` returns true for success and permanent outcomes
   - expose `State()` and the remaining cool-down; update the `circuit_breaker_state` gauge on
     state change (R9)
-- [ ] T092 [US7] Implement the breaker-open deferral in `internal/app/deliver.go`:
+- [ ] T093 [US7] Implement the breaker-open deferral in `internal/app/deliver.go`:
   `queued → sending → retrying` in one tx via `DeferSending`, without incrementing
   `data-model.md notifications.attempts`. `ErrOpenState`/`ErrTooManyRequests` take the same path.
+  Past `BREAKER_MAX_DEFER_AGE`, `DeferSending` instead moves `sending → failed`, setting
+  `data-model.md notifications.last_error` to `provider_unavailable` and
+  `data-model.md notifications.failed_at`; the consumer then dead-letters the message.
   Wire the breaker in `cmd/worker/main.go` in place of the noop. Makes T087 and T088 pass.
-- [ ] T093 [US7] Instrument the metrics:
+- [ ] T094 [US7] Instrument the metrics:
   - API: an HTTP metrics middleware in `internal/adapters/http/middleware.go`
     (`http_request_duration_seconds` with the chi route pattern); `notifications_created_total` /
     `notifications_rejected_total` in the create and batch handlers
   - worker: `notifications_delivered_total`, `notification_retries_total`,
     `notifications_dead_lettered_total` and `notification_e2e_latency_seconds` emitted from
-    `internal/app/deliver.go` through an injected recorder interface in `internal/ports/ports.go`
-- [ ] T094 [US7] Implement the backlog sampler:
+    `internal/app/deliver.go` through `ports.MetricsRecorder` (defined in T023), with a Prometheus
+    implementation in `internal/platform/metrics/recorder.go` replacing the noop recorder
+- [ ] T095 [US7] Implement the backlog sampler:
   - `internal/app/sampler.go`, a 5 s tick
   - a `BacklogCounts` query (GROUP BY channel, priority, status on `notifications_backlog_idx`) in
     `sql/queries/notifications.sql`
@@ -711,15 +741,15 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - set `rabbitmq_queue_messages{queue}` via passive declare in
     `internal/adapters/rabbitmq/depth.go`
   - (R16)
-- [ ] T095 [US7] Finish readiness and correlation:
+- [ ] T096 [US7] Finish readiness and correlation:
   - api readiness: postgres required, redis optional/`degraded`
   - worker readiness: postgres, rabbitmq, redis
   - make sure the correlation id flows from create → `data-model.md
-    notifications.correlation_id` → AMQP header → consumer ctx → every `Deliver`/reaper log line
+    notifications.correlation_id` → AMQP header → consumer ctx → every relay/`Deliver`/reaper log line
   - make sure the recipient and content are never logged
   - files: `cmd/api/main.go`, `cmd/worker/main.go`, `internal/app/deliver.go`
   - makes T089 and T090 pass
-- [ ] T096 [P] [US7] Write `specs/adr/0005-retry-backoff-and-circuit-breaker.md` from R9,
+- [ ] T097 [P] [US7] Write `specs/adr/0005-retry-backoff-and-circuit-breaker.md` from R9,
   including the per-process breaker trade-off.
 
 **Checkpoint**: all required stories (US1–US7) are done.
@@ -731,16 +761,21 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
 **Purpose**: per Constitution VII, finish the required features (tested and documented) before
 any bonus work.
 
-- [ ] T097 Write `README.md`:
+- [ ] T098 Write `README.md`:
   - setup (`docker compose up`)
   - an architecture diagram (Mermaid, from the plan's pipeline)
-  - design decisions linking ADRs 0001–0006
+  - design decisions linking ADRs 0001–0008, plus a note on the one-shot migrate service (R14)
   - trade-offs: the at-least-once window, the per-process breaker, the priority prefetch bound,
     best-effort WebSocket
   - API curl examples, a configuration table (from `.env.example`), and how to run the tests
   - "what I'd do with more time"
   - (Constitution IX)
-- [ ] T098 Run the required-scope validation (quickstart.md scenarios #1–#15) against
+- [ ] T099 Write `scripts/loadtest.sh` and a `make loadtest` target:
+  - vegeta in Docker (pinned image version) against the running `docker compose` stack
+  - 10,000 `POST /api/v1/notifications` with valid, unique SMS payloads
+  - report p50/p95/p99, and record the p95 with pass/fail against SC-001 (< 200 ms) in
+    `specs/001-notification-engine/checklists/validation.md`
+- [ ] T100 Run the required-scope validation (quickstart.md scenarios #1–#15) against
   `docker compose up`. Record the results in `specs/001-notification-engine/checklists/validation.md`
   and fix any gaps by appending tasks.
 
@@ -756,13 +791,13 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
 
 ### Tests for User Story 8 ⚠️
 
-- [ ] T099 [P] [US8] Write unit tests in `internal/domain/template_test.go`:
+- [ ] T101 [P] [US8] Write unit tests in `internal/domain/template_test.go`:
   - fields-only parser: `{{.Name}}` OK; `{{range}}`, `{{if}}`, pipelines, function calls and
     nested templates rejected
   - the derived variables are sorted and unique
   - render with missing variables lists all of them; extra variables are ignored
   - rendered content still goes through the channel limits
-- [ ] T100 [P] [US8] Write the template integration test in `test/integration/templates_test.go`:
+- [ ] T102 [P] [US8] Write the template integration test in `test/integration/templates_test.go`:
   - create 201 / duplicate name 409 / bad syntax 400
   - GET by id and list
   - send by template → the provider receives the rendered content
@@ -770,29 +805,40 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
     with `template_id` → 400
   - a batch item that uses a template
 
+- [ ] T103 [P] [US8] Write unit tests for the template use cases in
+  `internal/app/templates_test.go`:
+  - create derives sorted variables; a duplicate name → `ErrTemplateNameTaken`
+  - create-by-template renders the content, rejects missing variables (all named), rejects
+    `content` together with `template_id`, and returns a `ValidationError` on `template_id` for
+    an unknown template
+  - template variables are included in the payload hash
+
 ### Implementation for User Story 8
 
-- [ ] T101 [US8] Write `migrations/00002_templates.sql`:
+- [ ] T104 [US8] Write `migrations/00002_templates.sql`:
   - the `templates` table: `data-model.md templates.id`, `data-model.md templates.name` (UNIQUE,
     1–100), `data-model.md templates.body` (≤ 100,000), `data-model.md templates.variables`,
     `data-model.md templates.created_at`
   - add the FK on `data-model.md notifications.template_id`
-- [ ] T102 [US8] Implement `internal/domain/template.go`: `ParseTemplate(body)` walks the
+- [ ] T105 [US8] Implement `internal/domain/template.go`: `ParseTemplate(body)` walks the
   `text/template/parse` tree allowing only text and `.Field` actions (R12); `Variables()`;
   `Render(vars)` with `missingkey=error` that returns every missing name as a `ValidationError`.
-  Makes T099 pass.
-- [ ] T103 [US8] Write `sql/queries/templates.sql` (`InsertTemplate`, `GetTemplate`,
+  Makes T101 pass.
+- [ ] T106 [US8] Write `sql/queries/templates.sql` (`InsertTemplate`, `GetTemplate`,
   `ListTemplates`), run `make gen`, and implement
   `internal/adapters/postgres/template_repo.go` (unique violation →
   `domain.ErrTemplateNameTaken`).
-- [ ] T104 [US8] Implement `internal/app/templates.go` (`CreateTemplate`, `GetTemplate`,
+- [ ] T107 [US8] Implement `internal/app/templates.go` (`CreateTemplate`, `GetTemplate`,
   `ListTemplates`) and add template rendering to `internal/app/create.go` and
   `internal/app/batch.go`:
   - resolve the template, render, store the rendered content and `data-model.md
     notifications.template_vars`
   - the variables go into the payload hash
-- [ ] T105 [US8] Implement the `createTemplate`, `getTemplate` and `listTemplates` handlers in
-  `internal/adapters/http/templates.go`. Makes T100 pass.
+- [ ] T108 [US8] Implement the `createTemplate`, `getTemplate` and `listTemplates` handlers in
+  `internal/adapters/http/templates.go`. Makes T102 pass.
+- [ ] T109 [P] [US8] Write `specs/adr/0008-restricted-templates.md` from R12: fields-only
+  templates, naming every missing variable, injection and runaway-output risks, rendering at
+  submission time.
 
 ---
 
@@ -806,12 +852,12 @@ including transitions made by the worker.
 
 ### Tests for User Story 9 ⚠️
 
-- [ ] T106 [P] [US9] Write hub unit tests in `internal/adapters/ws/hub_test.go`:
+- [ ] T110 [P] [US9] Write hub unit tests in `internal/adapters/ws/hub_test.go`:
   - fan-out by notification id and by batch id
   - unsubscribe on disconnect
   - a full 64-message buffer → the client is closed with 1008
   - shutdown closes with 1001
-- [ ] T107 [P] [US9] Write the WebSocket integration test in `test/integration/ws_test.go`:
+- [ ] T111 [P] [US9] Write the WebSocket integration test in `test/integration/ws_test.go`:
   - unknown id → 404 before the upgrade; both or neither query params → 400
   - a notification subscription gets the snapshot, then `queued`, `sending`, `sent` published by
     the worker process within 1 s (SC-010)
@@ -819,46 +865,48 @@ including transitions made by the worker.
 
 ### Implementation for User Story 9
 
-- [ ] T108 [US9] Implement the Redis broadcaster and subscriber in
+- [ ] T112 [US9] Implement the Redis broadcaster and subscriber in
   `internal/adapters/redis/status.go`: `ports.StatusBroadcaster` publishes to
   `notification-status` with the payload from `contracts/events.md` §2, best-effort with a
   timeout; `Subscribe(ctx)` returns a channel of events.
-- [ ] T109 [US9] Implement the hub in `internal/adapters/ws/hub.go` (indexes by notification and
+- [ ] T113 [US9] Implement the hub in `internal/adapters/ws/hub.go` (indexes by notification and
   batch id, per-client bounded buffer) and the `/ws` handler in `internal/adapters/http/ws.go`:
   - validate params and existence (via `GetNotification`/`GetBatch`) before the upgrade
   - `coder/websocket` accept
   - send the snapshot, then 30 s pings with a 10 s pong timeout (`contracts/events.md` §3)
   - `ws_connections` gauge
-  - makes T106 pass
-- [ ] T110 [US9] Replace the noop broadcaster with the Redis broadcaster in `cmd/api/main.go` and
+  - makes T110 pass
+- [ ] T114 [US9] Replace the noop broadcaster with the Redis broadcaster in `cmd/api/main.go` and
   `cmd/worker/main.go`. Start the subscriber → hub loop in the api and mount `/ws`; close clients
-  on shutdown. Makes T107 pass.
+  on shutdown. Makes T111 pass.
+- [ ] T115 [P] [US9] Write `specs/adr/0007-realtime-fanout-via-redis-pubsub.md` from R11:
+  best-effort delivery, snapshot on connect, alternatives (LISTEN/NOTIFY, RabbitMQ fanout).
 
 ---
 
 ## Phase 13: Polish & Cross-Cutting Concerns (bonus)
 
-- [ ] T111 [P] Implement `GET /api/v1/metrics/summary`:
+- [ ] T116 [P] Implement `GET /api/v1/metrics/summary`:
   - summary queries in `sql/queries/summary.sql`: backlog; sent/failed/retried over the last
     5 min; `percentile_cont` p50/p95/p99 for e2e latency from `notifications` and provider latency
     from `notification_attempts` (`data-model.md notification_attempts.latency_ms`)
   - `internal/app/summary.go`
   - the `getMetricsSummary` handler in `internal/adapters/http/ops.go`
   - an integration test in `test/integration/summary_test.go`
-- [ ] T112 [P] Implement OpenTelemetry tracing:
+- [ ] T117 [P] Implement OpenTelemetry tracing:
   - `internal/platform/tracing/tracing.go`: OTLP exporter, a no-op when
     `OTEL_EXPORTER_OTLP_ENDPOINT` is empty
   - otelhttp on the router and the provider client
   - `traceparent` inject/extract in `internal/adapters/rabbitmq/publisher.go` and
     `internal/adapters/rabbitmq/consumer.go`
   - add Jaeger to the compose `observability` profile
-- [ ] T113 [P] Add Prometheus and Grafana:
+- [ ] T118 [P] Add Prometheus and Grafana:
   - `deploy/prometheus/prometheus.yml` scraping api:8080 and worker:9090
   - `deploy/grafana/provisioning/` with a datasource and a dashboard
     (`deploy/grafana/dashboards/notifications.json`): backlog by channel/priority, delivery rate
     by outcome, e2e/provider p95, breaker state
   - add prometheus and grafana to the compose `observability` profile
-- [ ] T114 Update `README.md` with the bonus features (templates, WebSocket, summary, tracing,
+- [ ] T119 Update `README.md` with the bonus features (templates, WebSocket, summary, tracing,
   Grafana). Run the full quickstart.md (#1–#18), `make lint`, `make gen-check` and `make test`;
   make sure CI is green.
 
@@ -912,7 +960,7 @@ worker wiring → checkpoint.
 - **After US1**: US2, US3, US4, US6 and US7 can each be worked on by a different developer; they
   touch mostly different files. Shared files are `sql/queries/notifications.sql` and
   `internal/adapters/postgres/notification_repo.go`, so serialise edits to those.
-- **ADRs**: T070, T086 and T096 run in parallel with their story's implementation.
+- **ADRs**: T070, T086 and T097 run in parallel with their story's implementation.
 
 ### Parallel example: User Story 1
 

@@ -75,7 +75,7 @@ rejected.
 | `template_id` | `uuid` | yes | FK → `templates.id` |
 | `template_vars` | `jsonb` | yes | kept for audit |
 | `provider_message_id` | `text` | yes | |
-| `last_error` | `text` | yes | truncated to 1 KB |
+| `last_error` | `text` | yes | truncated to 1 KB; set to `provider_unavailable` when a breaker deferral exceeds `BREAKER_MAX_DEFER_AGE` (research R9) |
 | `correlation_id` | `text` | no | |
 | `created_at` / `updated_at` | `timestamptz` | no | `updated_at` is set on every transition |
 | `sent_at` | `timestamptz` | yes | |
@@ -88,9 +88,6 @@ rejected.
   is used by the relay's per-channel `queued` count (backpressure, research R4) and by the reaper.
   The partial index stays small because relay backpressure caps `queued` at
   `RELAY_MAX_INFLIGHT_PER_CHANNEL` per channel.
-- `notifications_due_idx` (above) has `channel` as its leading column,
-  `(channel, priority DESC, next_attempt_at)`, so that each channel's quota-limited pick is one
-  index range scan.
 - `notifications_backlog_idx ON (channel, priority, status) WHERE status NOT IN ('sent','failed','cancelled')`
   is used by the backlog sampler and the summary.
 - `notifications_list_idx ON (created_at DESC, id DESC)` is used for unfiltered or partially
@@ -182,6 +179,7 @@ notifications 1 ──< notification_attempts
 | Mark queued | `UPDATE … SET status='queued' WHERE id = ANY($1) AND status IN (pending,scheduled,retrying)` (same tx as the pick) |
 | Start send | `UPDATE … SET status='sending' WHERE id=$1 AND status='queued' RETURNING *` |
 | Outcome | `UPDATE … WHERE id=$1 AND status='sending'` + `INSERT notification_attempts`, in one tx |
+| Defer (breaker open) | one tx: `queued → sending`, then `sending → retrying` with `next_attempt_at = now + remaining cool-down`, `attempts` unchanged and no attempt row. If `now − max(created_at, scheduled_at) > BREAKER_MAX_DEFER_AGE`, the second step is instead `sending → failed` with `last_error='provider_unavailable'` and `failed_at = now()` |
 | Cancel | `UPDATE … SET status='cancelled' WHERE id=$1 AND status IN (pending,scheduled,queued,retrying) RETURNING *`; on 0 rows, read the row to choose 404, 409 or 200 (already cancelled) |
 | Cancel batch | the same predicate with `batch_id=$1`, `RETURNING id` |
 | Reap sending | `UPDATE … WHERE status='sending' AND updated_at < now() - $timeout` (counts as an attempt, writes an `abandoned` attempt row) |

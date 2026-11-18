@@ -126,7 +126,10 @@ implementation (Constitution I).
     consumer moves `queued → sending`, records no attempt, then moves `sending → retrying`,
     without incrementing `attempts`, with `next_attempt_at = now + remaining cool-down + jitter`.
     Both steps run in one DB transaction. No rate-limit token is used (the breaker is checked
-    before the token is acquired).
+    before the token is acquired). If `now − max(created_at, scheduled_at)` exceeds
+    `BREAKER_MAX_DEFER_AGE` (default 1 h), the second step is `sending → failed` instead, with
+    `last_error='provider_unavailable'`, and the message is dead-lettered. This caps the deferral
+    loop (Constitution III).
   - **Reaper** (input: "queued/sending → retrying"): `queued → retrying` isn't allowed. The reaper
     does two things:
     - `sending` older than `REAPER_SENDING_TIMEOUT` (default 2 min) → `retrying`, counting the
@@ -144,7 +147,11 @@ implementation (Constitution I).
   1. Decode the message. A poison message is `Nack(requeue=false)` and goes to the DLQ.
   2. If the channel's breaker is open, take the deferral path from R5, then ack.
   3. Acquire a rate-limit permit (R8), waiting with ctx; Redis errors are retried with backoff,
-     failing closed.
+     failing closed. The total wait is capped by `LIMITER_MAX_WAIT` (default 30 s), whether the
+     time goes to throttling or to Redis errors. When the cap is hit, the message is
+     `Nack(requeue=true)` while the row is still `queued`, so it goes back to the broker and isn't
+     lost; `rate_limiter_timeouts_total` is incremented. This caps the retry loop
+     (Constitution III).
   4. Guarded `queued → sending`. If 0 rows (cancelled, duplicate, already done), ack and stop.
      This is the atomic cancel check required by FR-014.
   5. Call the provider through the channel's breaker with a 5 s timeout (FR-023).
@@ -196,8 +203,9 @@ implementation (Constitution I).
   so any 1 s window holds at most 100. It's still "a token bucket of capacity 1", one atomic
   round-trip per call.
 - **Failure mode**: if Redis is unreachable, the limiter **fails closed** (no sends, retry with
-  backoff) and the worker becomes not-ready. This protects the provider. Accepted messages wait in
-  `queued` and are not lost.
+  backoff) and the worker becomes not-ready. This protects the provider. Each consumer gives up
+  after `LIMITER_MAX_WAIT` and requeues the message (R6), so no goroutine holds a message
+  indefinitely. Accepted messages wait in `queued` and are not lost.
 - **Alternatives**: a sliding-window log (more memory, more Redis work); a token bucket with a small
   burst (still exceeds the strict window); dividing the limit statically per worker (breaks when
   replica count changes).
@@ -221,6 +229,11 @@ implementation (Constitution I).
     trip the channel.
   - `ErrOpenState` and `ErrTooManyRequests` both take the deferral path (R5), which doesn't use an
     attempt (FR-024).
+  - **Deferral cap**: a deferral for a notification whose age, measured from
+    `max(created_at, scheduled_at)`, exceeds `BREAKER_MAX_DEFER_AGE` (default 1 h) becomes
+    `failed` with `last_error='provider_unavailable'` and goes to the DLQ
+    (`notifications_dead_lettered_total{reason="provider_unavailable"}`). Without it, a provider
+    that never recovers would leave notifications non-terminal forever.
 - **Trade-off**: the breaker state is per process, not shared. With N workers, up to N trial calls
   can happen per cool-down. That's acceptable ("stops hammering", not "exactly one probe") and
   avoids yet another Redis round-trip per call. Documented in the ADR.
@@ -237,7 +250,7 @@ implementation (Constitution I).
   SC-007 test asserts the high item lands within the first `concurrency × workers + relay batch`
   sends.
 
-## R11. Real-time updates
+## R11. Real-time updates **(ADR: realtime-fanout-via-redis-pubsub)**
 
 - **Decision**: after each status-changing commit, the app layer calls the `StatusBroadcaster`
   port. The Redis adapter does `PUBLISH notification-status <json>`.
@@ -256,7 +269,7 @@ implementation (Constitution I).
   instance and has payload limits); a RabbitMQ fanout exchange (would make the API depend on the
   broker).
 
-## R12. Templates **(spec override)**
+## R12. Templates **(spec override)** **(ADR: restricted-templates)**
 
 - **Decision**:
   - Templates are channel-agnostic, per the spec's assumption, so the `channel` column from the
@@ -299,7 +312,8 @@ implementation (Constitution I).
   `worker` use `depends_on: condition: service_completed_successfully`. `make migrate` runs the
   same command.
 - **Rationale**: if both binaries ran migrations on startup they would race. A single step that
-  runs before either starts makes the order deterministic.
+  runs before either starts makes the order deterministic. This is documented as a design note in
+  the README rather than an ADR.
 
 ## R15. HTTP layer and contract **(spec override for non-JSON endpoints)**
 
@@ -388,6 +402,8 @@ implementation (Constitution I).
 | `MAX_ATTEMPTS` | `5` | api (stamped per row) |
 | `BACKOFF_BASE` / `BACKOFF_MAX` | `1s` / `5m` | worker |
 | `BREAKER_CONSECUTIVE_FAILURES` / `BREAKER_COOLDOWN` | `5` / `30s` | worker |
+| `BREAKER_MAX_DEFER_AGE` | `1h` | worker |
+| `LIMITER_MAX_WAIT` | `30s` | worker |
 | `RELAY_INTERVAL` / `RELAY_BATCH_SIZE` | `200ms` / `500` | worker |
 | `RELAY_MAX_INFLIGHT_PER_CHANNEL` | `1000` | worker |
 | `CONSUMER_CONCURRENCY_PER_CHANNEL` | `20` | worker |
