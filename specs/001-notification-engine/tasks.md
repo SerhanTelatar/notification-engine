@@ -668,8 +668,17 @@ filters applied; `limit=101` or a bad cursor → 400 (quickstart #10).
 
 ## Phase 9: User Story 7 - Operate and monitor the system (Priority: P2)
 
-**Goal**: a per-channel circuit breaker that doesn't consume attempts, the full metric set,
-end-to-end correlation ids, real readiness, and verified graceful shutdown.
+**Goal**: a per-channel circuit breaker that doesn't consume attempts, capped by
+`BREAKER_MAX_DEFER_AGE` (analysis finding D1), the full metric set, end-to-end correlation ids,
+real readiness, and verified graceful shutdown.
+
+**Tracked from /speckit-analyze, finding D1 (Constitution III: every retry has a cap)**: breaker
+deferrals don't use attempts, so without a cap a provider that never recovers would keep
+notifications non-terminal forever. Past `BREAKER_MAX_DEFER_AGE` (default 1 h, measured from
+`max(created_at, scheduled_at)`) a deferral ends `failed` with `last_error=provider_unavailable`
+and goes to the DLQ. Unit test T087, integration test T088, implementation T093. The Phase 9
+checkpoint isn't met without all three. The deferral path from T056 (`deliverer.deferClaimed`)
+has no age check yet.
 
 **Independent Test**: fail SMS at the mock during a burst. The breaker opens, SMS attempts stop
 growing, email/push keep flowing, and SMS recovers after the cool-down. The metrics, the
@@ -718,7 +727,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - `IsSuccessful` returns true for success and permanent outcomes
   - expose `State()` and the remaining cool-down; update the `circuit_breaker_state` gauge on
     state change (R9)
-- [ ] T093 [US7] Implement the breaker-open deferral in `internal/app/deliver.go`:
+- [ ] T093 [US7] (analysis finding D1) Implement the breaker-open deferral in `internal/app/deliver.go`:
   `queued → sending → retrying` in one tx via `DeferSending`, without incrementing
   `data-model.md notifications.attempts`. `ErrOpenState`/`ErrTooManyRequests` take the same path.
   Past `BREAKER_MAX_DEFER_AGE`, `DeferSending` instead moves `sending → failed`, setting
@@ -752,7 +761,9 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
 - [ ] T097 [P] [US7] Write `specs/adr/0005-retry-backoff-and-circuit-breaker.md` from R9,
   including the per-process breaker trade-off.
 
-**Checkpoint**: all required stories (US1–US7) are done.
+**Checkpoint**: all required stories (US1–US7) are done, including the `BREAKER_MAX_DEFER_AGE`
+cap (finding D1): a deferral older than the cap ends `failed` (`provider_unavailable`) and in the
+DLQ, verified by T087 and T088.
 
 ---
 
@@ -763,6 +774,8 @@ any bonus work.
 
 - [ ] T098 Write `README.md`:
   - setup (`docker compose up`)
+  - a "Bugs caught by tests" section from `specs/001-notification-engine/readme-backlog.md`
+    (starting with the FOR UPDATE claim fix in `be59a7b`); delete the backlog file once moved
   - an architecture diagram (Mermaid, from the plan's pipeline)
   - design decisions linking ADRs 0001–0008, plus a note on the one-shot migrate service (R14)
   - trade-offs: the at-least-once window, the per-process breaker, the priority prefetch bound,
