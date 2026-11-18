@@ -892,7 +892,7 @@ including transitions made by the worker.
 
 ### Implementation for User Story 9
 
-- [ ] T112 [US9] Implement the Redis broadcaster and subscriber in
+- [X] T112 [US9] Implement the Redis broadcaster and subscriber in
   `internal/adapters/redis/status.go`: `ports.StatusBroadcaster` publishes to
   `notification-status` with the payload from `contracts/events.md` §2, best-effort with a
   timeout; `Subscribe(ctx)` returns a channel of events.
