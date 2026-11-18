@@ -131,7 +131,7 @@ needs.
   - `ErrNotFound`, `ErrInvalidTransition`, `ErrIdempotencyConflict`, `ErrNotCancellable` (carries
     the current status), `ErrTemplateNameTaken`, `ErrTemplateNotFound`
   - all usable with `errors.Is`/`errors.As`
-- [ ] T021 Implement per-channel validation in `internal/domain/validate.go`:
+- [X] T021 Implement per-channel validation in `internal/domain/validate.go`:
   - `data-model.md notifications.recipient` (E.164, bare email addr-spec, push token ≤ 4,096
     bytes)
   - `data-model.md notifications.content` (sms ≤ 160 code points, email ≤ 100,000 code points,
