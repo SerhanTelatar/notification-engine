@@ -325,7 +325,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - an illegal guarded transition returns 0 rows
   - the CHECK constraints reject invalid status/priority/attempts
   - two concurrent relay transactions with SKIP LOCKED + advisory lock → each row picked once
-- [ ] T042 [P] [US1] Write the create API integration test in `test/integration/api_create_test.go`:
+- [X] T042 [P] [US1] Write the create API integration test in `test/integration/api_create_test.go`:
   - 202 + `X-Correlation-ID` echoed
   - 400 with every field error for each channel rule (spec US1-AS3..6)
   - `Idempotency-Key` header replay returns `Idempotent-Replayed: true`
