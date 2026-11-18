@@ -55,7 +55,8 @@ type RelayResult struct {
 	Skipped string
 }
 
-// PublishFunc publishes rows inside the relay transaction. A non-nil error rolls it back.
+// PublishFunc publishes rows inside the relay transaction. A non-nil error rolls it back. Relay
+// rows carry their status from before the relay (pending, scheduled or retrying).
 type PublishFunc func(ctx context.Context, rows []domain.Notification) error
 
 // QuotaFunc turns a channel's current queued count into how many due rows to pick now. The

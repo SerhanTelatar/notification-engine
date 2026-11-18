@@ -104,7 +104,9 @@ func (r *NotificationRepo) RelayTx(ctx context.Context, ch domain.Channel, at ti
 			if err != nil {
 				return err
 			}
-			n.Status, n.UpdatedAt = domain.StatusQueued, at
+			// Rows keep their pre-relay status (pending/scheduled/retrying) so the caller can
+			// report the transition; in the database they're queued now.
+			n.UpdatedAt = at
 			picked[i] = *n
 		}
 		// Publish inside the transaction; a failure rolls the rows back to due (ADR 0002).

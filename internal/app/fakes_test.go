@@ -217,8 +217,8 @@ func (r *memRepo) RelayTx(ctx context.Context, ch domain.Channel, at time.Time, 
 	picked := make([]domain.Notification, 0, len(due))
 	for _, n := range due {
 		before[n.ID] = *n
+		picked = append(picked, *n) // pre-relay status, like the Postgres repository
 		n.Status, n.UpdatedAt = domain.StatusQueued, at
-		picked = append(picked, *n)
 	}
 	r.mu.Unlock()
 

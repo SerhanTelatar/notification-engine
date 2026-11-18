@@ -411,7 +411,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - put the correlation id from the header into ctx
   - ack or nack according to the handler's result
   - stops consuming on ctx cancel and waits for in-flight handlers (R17)
-- [ ] T054 [US1] Implement `internal/app/relay.go` (`RelayDue` tick): for each channel run
+- [X] T054 [US1] Implement `internal/app/relay.go` (`RelayDue` tick): for each channel run
   `RelayTx` with the backpressure quota from R4, publish via the `Publisher` port, broadcast
   `queued` events, increment `relay_published_total`/`relay_backpressure_skips_total`. Every per-row log line
   carries that row's `correlation_id`; tick-level lines carry a generated `tick_id`. Makes T039

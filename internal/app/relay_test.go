@@ -173,3 +173,17 @@ func TestRelayPublishFailureRollsBack(t *testing.T) {
 		t.Fatalf("logs lack correlation or tick ids:\n%s", logs)
 	}
 }
+
+func TestRelayEventsReportTheRealSourceStatus(t *testing.T) {
+	f := newRelayFixture(1000, 500)
+	retry := queuedNotification("retry", domain.ChannelSMS, f.clock.Now().Add(-time.Second))
+	retry.Status = domain.StatusRetrying
+	f.repo.put(retry)
+	if err := f.relay.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ev := f.events.events[0]
+	if ev.From == nil || *ev.From != domain.StatusRetrying || ev.To != domain.StatusQueued {
+		t.Fatalf("event %+v, want retrying → queued", ev)
+	}
+}
