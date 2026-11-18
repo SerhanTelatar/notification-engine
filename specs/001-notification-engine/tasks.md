@@ -228,7 +228,7 @@ needs.
 
 ### HTTP and worker skeletons
 
-- [ ] T029 Implement the HTTP server in `internal/adapters/http/server.go`:
+- [X] T029 Implement the HTTP server in `internal/adapters/http/server.go`:
   - chi router mounting the generated strict handler at `/`
   - a `Server` struct that implements `gen.StrictServerInterface`. Operations not built yet return
     a sentinel `errNotImplemented`, which the strict `ResponseErrorHandlerFunc` maps to 501 with
