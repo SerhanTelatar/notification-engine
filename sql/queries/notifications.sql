@@ -125,3 +125,13 @@ FOR UPDATE SKIP LOCKED;
 -- name: TouchQueued :exec
 UPDATE notifications SET updated_at = @now
 WHERE id = ANY(@ids::uuid[]) AND status = 'queued';
+
+-- ---------------------------------------------------------------------------------------------
+-- Status lookup (US2, FR-009)
+-- ---------------------------------------------------------------------------------------------
+
+-- name: GetNotification :one
+SELECT * FROM notifications WHERE id = @id;
+
+-- name: ListAttempts :many
+SELECT * FROM notification_attempts WHERE notification_id = @notification_id ORDER BY attempt_no;

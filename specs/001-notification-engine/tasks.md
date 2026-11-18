@@ -480,7 +480,7 @@ batch lookup (US2-AS3) is delivered with US4 in T076.
 
 ### Implementation for User Story 2
 
-- [ ] T063 [US2] Add `GetNotification` and `ListAttempts` (`ORDER BY attempt_no`) to
+- [X] T063 [US2] Add `GetNotification` and `ListAttempts` (`ORDER BY attempt_no`) to
   `sql/queries/notifications.sql`, run `make gen`, and implement them in
   `internal/adapters/postgres/notification_repo.go`.
 - [ ] T064 [US2] Implement `GetNotification` in `internal/app/query.go`, returning the aggregate

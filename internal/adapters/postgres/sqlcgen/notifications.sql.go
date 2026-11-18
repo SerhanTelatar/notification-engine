@@ -98,6 +98,45 @@ func (q *Queries) GetByIdempotencyKey(ctx context.Context, idempotencyKey *strin
 	return i, err
 }
 
+const getNotification = `-- name: GetNotification :one
+
+SELECT id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at FROM notifications WHERE id = $1
+`
+
+// ---------------------------------------------------------------------------------------------
+// Status lookup (US2, FR-009)
+// ---------------------------------------------------------------------------------------------
+func (q *Queries) GetNotification(ctx context.Context, id uuid.UUID) (Notification, error) {
+	row := q.db.QueryRow(ctx, getNotification, id)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.BatchID,
+		&i.IdempotencyKey,
+		&i.PayloadHash,
+		&i.Channel,
+		&i.Recipient,
+		&i.Content,
+		&i.Priority,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.NextAttemptAt,
+		&i.ScheduledAt,
+		&i.TemplateID,
+		&i.TemplateVars,
+		&i.ProviderMessageID,
+		&i.LastError,
+		&i.CorrelationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SentAt,
+		&i.CancelledAt,
+		&i.FailedAt,
+	)
+	return i, err
+}
+
 const insertAttempt = `-- name: InsertAttempt :exec
 INSERT INTO notification_attempts (
     notification_id, attempt_no, started_at, finished_at, latency_ms, http_status, outcome, error
@@ -216,6 +255,40 @@ func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotification
 		&i.FailedAt,
 	)
 	return i, err
+}
+
+const listAttempts = `-- name: ListAttempts :many
+SELECT id, notification_id, attempt_no, started_at, finished_at, latency_ms, http_status, outcome, error FROM notification_attempts WHERE notification_id = $1 ORDER BY attempt_no
+`
+
+func (q *Queries) ListAttempts(ctx context.Context, notificationID uuid.UUID) ([]NotificationAttempt, error) {
+	rows, err := q.db.Query(ctx, listAttempts, notificationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NotificationAttempt{}
+	for rows.Next() {
+		var i NotificationAttempt
+		if err := rows.Scan(
+			&i.ID,
+			&i.NotificationID,
+			&i.AttemptNo,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.LatencyMs,
+			&i.HttpStatus,
+			&i.Outcome,
+			&i.Error,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockForClaim = `-- name: LockForClaim :one

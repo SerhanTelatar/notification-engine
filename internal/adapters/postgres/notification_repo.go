@@ -286,15 +286,49 @@ func (r *NotificationRepo) RepublishStaleQueued(ctx context.Context, olderThan, 
 	return n, err
 }
 
+// Get returns one notification; an unknown or malformed id is domain.ErrNotFound.
+func (r *NotificationRepo) Get(ctx context.Context, id string) (*domain.Notification, error) {
+	uid, err := parseID(id)
+	if err != nil {
+		return nil, err
+	}
+	row, err := r.q.GetNotification(ctx, uid)
+	if err != nil {
+		return nil, translate(err, "get notification")
+	}
+	return toDomain(row)
+}
+
+// ListAttempts returns a notification's attempt history ordered by attempt_no (FR-009).
+func (r *NotificationRepo) ListAttempts(ctx context.Context, id string) ([]domain.Attempt, error) {
+	uid, err := parseID(id)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.q.ListAttempts(ctx, uid)
+	if err != nil {
+		return nil, translate(err, "list attempts")
+	}
+	out := make([]domain.Attempt, len(rows))
+	for i, a := range rows {
+		out[i] = domain.Attempt{
+			NotificationID: a.NotificationID.String(),
+			AttemptNo:      int(a.AttemptNo),
+			StartedAt:      a.StartedAt.UTC(),
+			FinishedAt:     a.FinishedAt.UTC(),
+			LatencyMS:      int(a.LatencyMs),
+			Outcome:        domain.Outcome(a.Outcome),
+			Error:          a.Error,
+		}
+		if a.HttpStatus != nil {
+			s := int(*a.HttpStatus)
+			out[i].HTTPStatus = &s
+		}
+	}
+	return out, nil
+}
+
 // --- Arriving with later user stories ---------------------------------------------------------
-
-func (r *NotificationRepo) Get(context.Context, string) (*domain.Notification, error) {
-	return nil, fmt.Errorf("get notification (US2): %w", errNotYet)
-}
-
-func (r *NotificationRepo) ListAttempts(context.Context, string) ([]domain.Attempt, error) {
-	return nil, fmt.Errorf("list attempts (US2): %w", errNotYet)
-}
 
 func (r *NotificationRepo) List(context.Context, ports.ListFilter) ([]domain.Notification, error) {
 	return nil, fmt.Errorf("list notifications (US6): %w", errNotYet)
