@@ -639,7 +639,7 @@ filters applied; `limit=101` or a bad cursor → 400 (quickstart #10).
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T082 [P] [US6] Write unit tests for the cursor in `internal/app/cursor_test.go`: encode and
+- [X] T082 [P] [US6] Write unit tests for the cursor in `internal/app/cursor_test.go`: encode and
   decode round-trip of `{created_at, id}` as base64url; malformed, truncated or tampered input →
   `ValidationError` on `cursor`.
 - [ ] T083 [P] [US6] Write the list integration test in `test/integration/api_list_test.go`:
