@@ -15,7 +15,9 @@ import (
 
 	"github.com/SerhanTelatar/notification-engine/api"
 	httpapi "github.com/SerhanTelatar/notification-engine/internal/adapters/http"
+	"github.com/SerhanTelatar/notification-engine/internal/adapters/noop"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/postgres"
+	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/config"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/metrics"
@@ -66,7 +68,13 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	checker := health.New(health.DefaultTimeout).
 		Require("postgres", postgres.Ping(pool))
 
-	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker}))
+	repo := postgres.NewNotificationRepo(pool)
+	creator := app.NewCreator(app.CreatorDeps{
+		Repo: repo, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: log, MaxAttempts: cfg.MaxAttempts,
+		Events: noop.Broadcaster{}, // Redis fan-out arrives with US9
+	})
+
+	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker, Creator: creator}))
 	httpapi.MountOps(router, reg, api.Spec)
 	srv := httpapi.NewHTTPServer(cfg.HTTPAddr, router)
 

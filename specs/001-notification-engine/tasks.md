@@ -452,7 +452,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - noop limiter/breaker/broadcaster (T024)
   - worker readiness: postgres + rabbitmq
   - makes T043–T045 pass
-- [ ] T060 [US1] Wire the create endpoint into `cmd/api/main.go` with `IDGenerator`, `Clock`,
+- [X] T060 [US1] Wire the create endpoint into `cmd/api/main.go` with `IDGenerator`, `Clock`,
   `MAX_ATTEMPTS` and the noop broadcaster. Verify quickstart scenarios #1–#5 manually.
 
 **Checkpoint**: MVP. A notification can be created, delivered, retried and failed, and survives a
