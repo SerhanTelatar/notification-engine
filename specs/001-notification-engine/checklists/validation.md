@@ -191,7 +191,7 @@ All of quickstart #1–#18 was rerun on `main` after the bonus PRs (#4–#8) wer
 | 14 | Correlation | ✅ | The api lines (`notification accepted`, `http request`) and the worker line (`notification sent`) all carry `demo-14`; no recipient or content in any log line |
 | 15 | Readiness with RabbitMQ stopped | ✅ | Worker `/readyz` 503 (`rabbitmq: unavailable`), `/healthz` 200, workers stayed up; API ready and accepting (`pending`); worker ready again 12 s after the broker started, and the outage notification was then `sent` |
 | 16 | Templates | ✅ | The provider received `Hi Ada, your code is 1234`; sending without `Code` → 400 naming `variables.Code` |
-| 17 | Real-time | ✅ | `snapshot` (`scheduled`), then `queued` → `sending` → `sent`, each 3–38 ms after its commit (SC-010: ≤ 1 s) |
+| 17 | Real-time | ✅ | `snapshot` (`scheduled`), then `queued` → `sending` → `sent`, each 5–38 ms after its commit (SC-010: ≤ 1 s) |
 | 18 | Metrics | ✅ | Summary: SMS `sent 12, failed 1, retried 4, success_rate 0.71`, e2e p95 290 ms, provider p95 31 ms; email `failed 1` (from #5); the backlog was empty, matching the `notification_backlog` gauges |
 
 **Bonus observability checked in the same run**:
