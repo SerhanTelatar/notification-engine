@@ -99,7 +99,7 @@ needs.
   - `From(ctx)` adds `correlation_id`, `notification_id` and `batch_id` when they're in ctx
   - fields per `contracts/observability.md` § Logs
   - tests in `internal/platform/logger/logger_test.go`
-- [ ] T015 [P] Implement the shutdown helpers in `internal/platform/shutdown/shutdown.go`: a
+- [X] T015 [P] Implement the shutdown helpers in `internal/platform/shutdown/shutdown.go`: a
   signal-aware root ctx (SIGTERM/SIGINT) and an errgroup runner with a bounded `SHUTDOWN_TIMEOUT`
   (R17).
 - [ ] T016 [P] Implement the metrics registry in `internal/platform/metrics/metrics.go`:
