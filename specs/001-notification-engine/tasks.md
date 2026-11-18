@@ -220,7 +220,7 @@ needs.
   - `WithTx(ctx, fn)` helper
   - error translation: unique violation → typed sentinel; `pgx.ErrNoRows` → `domain.ErrNotFound`
   - errors wrapped with `%w`
-- [ ] T028 [P] Build the testcontainers harness in `test/integration/testenv/testenv.go`
+- [X] T028 [P] Build the testcontainers harness in `test/integration/testenv/testenv.go`
   (build tag `integration`):
   - start postgres:16 (with migrations applied), rabbitmq:3.13 and redis:7 once per package
   - per-test DB truncation
