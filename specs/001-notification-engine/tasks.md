@@ -842,7 +842,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
 
 ### Implementation for User Story 8
 
-- [ ] T104 [US8] Write `migrations/00002_templates.sql`:
+- [X] T104 [US8] Write `migrations/00002_templates.sql`:
   - the `templates` table: `data-model.md templates.id`, `data-model.md templates.name` (UNIQUE,
     1–100), `data-model.md templates.body` (≤ 100,000), `data-model.md templates.variables`,
     `data-model.md templates.created_at`
