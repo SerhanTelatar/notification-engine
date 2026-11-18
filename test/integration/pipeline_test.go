@@ -20,8 +20,8 @@ import (
 )
 
 // The worker pipeline assembled from real adapters, the way cmd/worker wires it, but with
-// test-sized timings. Only the rate limiter, breaker and broadcaster are pass-throughs; they
-// arrive with US3, US7 and US9.
+// test-sized timings. The breaker and broadcaster are pass-throughs until US7 and US9; the rate
+// limiter is a pass-through unless a test supplies one.
 
 type pipelineConfig struct {
 	providerURL     string
@@ -36,6 +36,8 @@ type pipelineConfig struct {
 	queuedTimeout   time.Duration
 	backoffBase     time.Duration
 	backoffMax      time.Duration
+	limiter         ports.RateLimiter // nil = pass-through
+	limiterMaxWait  time.Duration     // 0 = 1 s
 }
 
 func defaultPipeline(providerURL string) pipelineConfig {
@@ -116,9 +118,9 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 
 	deliverer := app.NewDeliverer(app.DelivererDeps{
 		Repo: p.repo, Provider: provider.NewClient(cfg.providerURL, cfg.providerTimeout, nil),
-		Breaker: noop.Breaker{}, Limiter: noop.Limiter{}, Events: noop.Broadcaster{}, Metrics: p.metrics,
+		Breaker: noop.Breaker{}, Limiter: limiterOrNoop(cfg.limiter), Events: noop.Broadcaster{}, Metrics: p.metrics,
 		Clock: noop.Clock{}, Log: quietLog, BackoffBase: cfg.backoffBase, BackoffMax: cfg.backoffMax,
-		LimiterMaxWait: time.Second,
+		LimiterMaxWait: durationOr(cfg.limiterMaxWait, time.Second),
 	})
 	reaper := app.NewReaper(app.ReaperDeps{Repo: p.repo, Publisher: p.pub, Events: noop.Broadcaster{},
 		Metrics: p.metrics, Clock: noop.Clock{}, Log: quietLog,
@@ -161,6 +163,20 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 	}
 	t.Cleanup(p.stop)
 	return p
+}
+
+func limiterOrNoop(l ports.RateLimiter) ports.RateLimiter {
+	if l == nil {
+		return noop.Limiter{}
+	}
+	return l
+}
+
+func durationOr(d, def time.Duration) time.Duration {
+	if d <= 0 {
+		return def
+	}
+	return d
 }
 
 // stop cancels every component and waits for them, like SIGTERM on the worker.

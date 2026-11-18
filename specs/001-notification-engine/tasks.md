@@ -504,7 +504,7 @@ items not early (quickstart #11).
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T066 [P] [US3] Write the rate-limit integration test in `test/integration/ratelimit_test.go`
+- [X] T066 [P] [US3] Write the rate-limit integration test in `test/integration/ratelimit_test.go`
   (real Redis):
   - 2 limiter instances at 20/s for 3 s → at most 20 permits in any sliding 1 s window
   - per-channel keys are independent
