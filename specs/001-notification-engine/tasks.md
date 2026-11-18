@@ -373,7 +373,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - `InsertAttempt`
   - `ReapStaleSending`, `PickStaleQueued`, `TouchQueued`
   - follow the guards in the data-model.md "Write paths" table
-- [ ] T048 [US1] Implement `internal/adapters/postgres/notification_repo.go` (`NotificationRepository`):
+- [X] T048 [US1] Implement `internal/adapters/postgres/notification_repo.go` (`NotificationRepository`):
   - `Create` (on conflict: re-select and compare `data-model.md notifications.payload_hash`)
   - `RelayTx(ctx, channel, fn)`: one tx with lock → count → pick → mark queued → callback publish
     → commit/rollback

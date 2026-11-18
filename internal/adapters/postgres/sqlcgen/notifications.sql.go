@@ -24,14 +24,14 @@ func (q *Queries) CountQueued(ctx context.Context, channel string) (int32, error
 }
 
 const deferFail = `-- name: DeferFail :one
-UPDATE notifications SET status = 'failed', last_error = $1, failed_at = $2, updated_at = $2
+UPDATE notifications SET status = 'failed', last_error = $1, failed_at = $2::timestamptz, updated_at = $2::timestamptz
 WHERE id = $3 AND status = 'sending'
 RETURNING id
 `
 
 type DeferFailParams struct {
 	LastError *string
-	Now       *time.Time
+	Now       time.Time
 	ID        uuid.UUID
 }
 
@@ -221,14 +221,14 @@ func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotification
 const markFailed = `-- name: MarkFailed :one
 UPDATE notifications
 SET status = 'failed', attempts = attempts + 1, last_error = $1,
-    failed_at = $2, updated_at = $2
+    failed_at = $2::timestamptz, updated_at = $2::timestamptz
 WHERE id = $3 AND status = 'sending'
 RETURNING attempts
 `
 
 type MarkFailedParams struct {
 	LastError *string
-	Now       *time.Time
+	Now       time.Time
 	ID        uuid.UUID
 }
 
@@ -300,14 +300,14 @@ func (q *Queries) MarkRetrying(ctx context.Context, arg MarkRetryingParams) (int
 const markSent = `-- name: MarkSent :one
 UPDATE notifications
 SET status = 'sent', attempts = attempts + 1, provider_message_id = $1,
-    last_error = NULL, sent_at = $2, updated_at = $2
+    last_error = NULL, sent_at = $2::timestamptz, updated_at = $2::timestamptz
 WHERE id = $3 AND status = 'sending'
 RETURNING attempts
 `
 
 type MarkSentParams struct {
 	ProviderMessageID *string
-	Now               *time.Time
+	Now               time.Time
 	ID                uuid.UUID
 }
 

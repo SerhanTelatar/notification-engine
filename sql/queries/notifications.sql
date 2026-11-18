@@ -60,7 +60,7 @@ RETURNING *;
 -- name: MarkSent :one
 UPDATE notifications
 SET status = 'sent', attempts = attempts + 1, provider_message_id = @provider_message_id,
-    last_error = NULL, sent_at = @now, updated_at = @now
+    last_error = NULL, sent_at = @now::timestamptz, updated_at = @now::timestamptz
 WHERE id = @id AND status = 'sending'
 RETURNING attempts;
 
@@ -74,7 +74,7 @@ RETURNING attempts;
 -- name: MarkFailed :one
 UPDATE notifications
 SET status = 'failed', attempts = attempts + 1, last_error = @last_error,
-    failed_at = @now, updated_at = @now
+    failed_at = @now::timestamptz, updated_at = @now::timestamptz
 WHERE id = @id AND status = 'sending'
 RETURNING attempts;
 
@@ -93,7 +93,7 @@ RETURNING id;
 
 -- name: DeferFail :one
 -- Breaker deferral older than BREAKER_MAX_DEFER_AGE: give up as provider_unavailable.
-UPDATE notifications SET status = 'failed', last_error = @last_error, failed_at = @now, updated_at = @now
+UPDATE notifications SET status = 'failed', last_error = @last_error, failed_at = @now::timestamptz, updated_at = @now::timestamptz
 WHERE id = @id AND status = 'sending'
 RETURNING id;
 

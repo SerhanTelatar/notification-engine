@@ -202,7 +202,7 @@ func TestRepoDeliveryLifecycle(t *testing.T) {
 	long := strings.Repeat("e", 5000)
 	if err := repo.ApplyOutcome(ctx, ports.DeliveryOutcome{NotificationID: retry.ID, To: domain.StatusRetrying, At: now,
 		NextAttemptAt: now.Add(time.Minute), LastError: &long,
-		Attempt:       domain.Attempt{Outcome: domain.OutcomeTransient, Error: &long, StartedAt: now, FinishedAt: now}}); err != nil {
+		Attempt: domain.Attempt{Outcome: domain.OutcomeTransient, Error: &long, StartedAt: now, FinishedAt: now}}); err != nil {
 		t.Fatal(err)
 	}
 	var lastLen, attLen int
