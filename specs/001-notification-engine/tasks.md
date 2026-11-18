@@ -791,6 +791,9 @@ any bonus work.
 - [ ] T100 Run the required-scope validation (quickstart.md scenarios #1–#15) against
   `docker compose up`. Record the results in `specs/001-notification-engine/checklists/validation.md`
   and fix any gaps by appending tasks.
+- [X] T120 Fix the gap found by T100 (quickstart #11): the worker published the fixed host port
+  `9090:9090`, so `docker compose up --scale worker=2` failed to start the second replica. Publish
+  a host port range (`9090-9099:9090`) so each replica gets its own ops port.
 
 ---
 
