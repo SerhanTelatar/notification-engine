@@ -861,7 +861,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
   - resolve the template, render, store the rendered content and `data-model.md
     notifications.template_vars`
   - the variables go into the payload hash
-- [ ] T108 [US8] Implement the `createTemplate`, `getTemplate` and `listTemplates` handlers in
+- [X] T108 [US8] Implement the `createTemplate`, `getTemplate` and `listTemplates` handlers in
   `internal/adapters/http/templates.go`. Makes T102 pass.
 - [ ] T109 [P] [US8] Write `specs/adr/0008-restricted-templates.md` from R12: fields-only
   templates, naming every missing variable, injection and runaway-output risks, rendering at

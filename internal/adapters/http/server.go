@@ -41,26 +41,28 @@ type Deps struct {
 	Query     *app.Query
 	Batcher   *app.Batcher
 	Canceller *app.Canceller
+	Templates *app.Templates
 	// Metrics, when set, counts created and rejected notifications.
 	Metrics *metrics.API
 }
 
 // Server implements gen.StrictServerInterface. Operations not built yet return errNotImplemented.
 type Server struct {
-	log     *slog.Logger
-	health  *health.Checker
-	create  *app.Creator
-	query   *app.Query
-	batch   *app.Batcher
-	cancel  *app.Canceller
-	metrics *metrics.API
+	log       *slog.Logger
+	health    *health.Checker
+	create    *app.Creator
+	query     *app.Query
+	batch     *app.Batcher
+	cancel    *app.Canceller
+	templates *app.Templates
+	metrics   *metrics.API
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
 // NewServer returns the strict-server implementation.
 func NewServer(d Deps) *Server {
-	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher, cancel: d.Canceller, metrics: d.Metrics}
+	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher, cancel: d.Canceller, templates: d.Templates, metrics: d.Metrics}
 }
 
 // NewRouter mounts the generated routes on chi.
@@ -99,18 +101,6 @@ func NewHTTPServer(addr string, h http.Handler) *http.Server {
 }
 
 // --- Operations: each returns errNotImplemented until its user story lands. ---
-
-func (s *Server) CreateTemplate(context.Context, gen.CreateTemplateRequestObject) (gen.CreateTemplateResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) ListTemplates(context.Context, gen.ListTemplatesRequestObject) (gen.ListTemplatesResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) GetTemplate(context.Context, gen.GetTemplateRequestObject) (gen.GetTemplateResponseObject, error) {
-	return nil, errNotImplemented
-}
 
 func (s *Server) GetMetricsSummary(context.Context, gen.GetMetricsSummaryRequestObject) (gen.GetMetricsSummaryResponseObject, error) {
 	return nil, errNotImplemented
