@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
+	"github.com/SerhanTelatar/notification-engine/internal/ports"
 )
 
 func TestGetNotificationWithAttemptHistory(t *testing.T) {
@@ -52,5 +54,60 @@ func TestGetNotificationNotFound(t *testing.T) {
 	_, err := NewQuery(QueryDeps{Repo: newRepo()}).GetNotification(context.Background(), "missing")
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// listRepo records the filter and returns canned rows.
+type listRepo struct {
+	*memRepo
+	got  ports.ListFilter
+	rows []domain.Notification
+}
+
+func (r *listRepo) List(_ context.Context, f ports.ListFilter) ([]domain.Notification, error) {
+	r.got = f
+	if len(r.rows) > f.Limit {
+		return r.rows[:f.Limit], nil
+	}
+	return r.rows, nil
+}
+
+func TestListPagingAndValidation(t *testing.T) {
+	base := newClock().Now()
+	var rows []domain.Notification
+	for i := range 3 {
+		n := queuedNotification(fmt.Sprintf("00000000-0000-7000-8000-00000000000%d", i), domain.ChannelSMS, base.Add(-time.Duration(i)*time.Second))
+		rows = append(rows, *n)
+	}
+	repo := &listRepo{memRepo: newRepo(), rows: rows}
+	q := NewQuery(QueryDeps{Repo: repo})
+
+	limit := 2
+	res, err := q.List(context.Background(), ListRequest{Limit: &limit, Status: strp("queued"), Channel: strp("sms")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.got.Limit != 3 || *repo.got.Status != domain.StatusQueued || *repo.got.Channel != domain.ChannelSMS {
+		t.Fatalf("filter %+v: must fetch limit+1 with parsed filters", repo.got)
+	}
+	if len(res.Items) != 2 || res.NextCursor == nil {
+		t.Fatalf("page %d items next=%v, want 2 and a cursor", len(res.Items), res.NextCursor)
+	}
+	c, err := DecodeCursor(*res.NextCursor)
+	if err != nil || c.ID != rows[1].ID || !c.CreatedAt.Equal(rows[1].CreatedAt) {
+		t.Fatalf("cursor %+v must point at the page's last row", c)
+	}
+
+	res, _ = q.List(context.Background(), ListRequest{})
+	if repo.got.Limit != DefaultPageSize+1 || res.NextCursor != nil || len(res.Items) != 3 {
+		t.Fatalf("default page: limit %d next %v items %d", repo.got.Limit, res.NextCursor, len(res.Items))
+	}
+
+	tooBig, from, to := 101, base, base.Add(-time.Hour)
+	_, err = q.List(context.Background(), ListRequest{Limit: &tooBig, Status: strp("delivered"), Channel: strp("fax"),
+		From: &from, To: &to, Cursor: strp("garbage")})
+	var v *domain.ValidationError
+	if !errors.As(err, &v) || len(v.Fields) != 5 {
+		t.Fatalf("err %v: want one ValidationError with limit, status, channel, to and cursor", err)
 	}
 }

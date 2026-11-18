@@ -650,7 +650,7 @@ filters applied; `limit=101` or a bad cursor → 400 (quickstart #10).
 
 ### Implementation for User Story 6
 
-- [ ] T084 [US6] Implement `internal/app/cursor.go` (opaque keyset cursor) and `List` in
+- [X] T084 [US6] Implement `internal/app/cursor.go` (opaque keyset cursor) and `List` in
   `internal/app/query.go`, which validates `limit` (1–100, default 20) and fetches `limit+1` to
   derive `next_cursor`. Makes T082 pass.
 - [ ] T085 [US6] Add `ListNotifications` to `sql/queries/notifications.sql`:
