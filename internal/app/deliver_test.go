@@ -458,3 +458,20 @@ func TestDeliverBreakerOpeningMidCallDefers(t *testing.T) {
 		t.Fatalf("row %s attempts %d calls %d", n.Status, n.Attempts, f.provider.callCount())
 	}
 }
+
+func TestDeliverDeferralNeverOvershootsTheCap(t *testing.T) {
+	f := newDeliverFixture()
+	f.uc.d.MaxDeferAge = time.Hour
+	f.breaker.open, f.breaker.retryIn = true, 10*time.Minute
+	now := f.clock.Now()
+	msg := f.queue("n1", func(n *domain.Notification) { n.CreatedAt = now.Add(-58 * time.Minute) })
+	if d := f.uc.Handle(context.Background(), msg); d != ports.DecisionAck {
+		t.Fatalf("decision %s", d)
+	}
+	n := f.repo.get("n1")
+	capAt := n.CreatedAt.Add(time.Hour)
+	if n.NextAttemptAt.After(capAt.Add(time.Millisecond)) {
+		t.Fatalf("next attempt at %v, after the cap at %v: the cap would be enforced up to a cool-down late",
+			n.NextAttemptAt, capAt)
+	}
+}

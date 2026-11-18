@@ -86,16 +86,20 @@ func run(ctx context.Context) error {
 	clock, ids := noop.Clock{}, noop.UUIDv7{}
 	// Shared across every worker: at most RATE_LIMIT_PER_SECOND deliveries per channel (FR-016).
 	limiter := redisadapter.NewRateLimiter(rdb, cfg.RateLimitPerSecond, cfg.RateLimitHeadroom)
-	// Pass-throughs until their stories: the gobreaker breaker and the Prometheus recorder (US7),
-	// the Redis broadcaster (US9).
-	breaker, events, recorder := noop.Breaker{}, noop.Broadcaster{}, noop.Recorder{}
+	// One breaker per channel; state changes feed circuit_breaker_state (FR-024).
+	breaker := provider.NewBreakers(cfg.BreakerConsecutiveFailures, cfg.BreakerCooldown, func(ch domain.Channel, state int) {
+		m.BreakerState.WithLabelValues(string(ch)).Set(float64(state))
+	})
+	// Pass-throughs until their stories: the Prometheus recorder (US7, T094), the Redis
+	// broadcaster (US9).
+	events, recorder := noop.Broadcaster{}, noop.Recorder{}
 
 	// --- Use cases ----------------------------------------------------------------------------
 	deliverer := app.NewDeliverer(app.DelivererDeps{
 		Repo: repo, Provider: providerClient, Breaker: breaker, Limiter: limiter, Events: events,
 		Metrics: recorder, Clock: clock, Log: log.With("component", "deliver"),
 		BackoffBase: cfg.BackoffBase, BackoffMax: cfg.BackoffMax, LimiterMaxWait: cfg.LimiterMaxWait,
-		SendOffset: cfg.RateLimitSendOffset,
+		SendOffset: cfg.RateLimitSendOffset, MaxDeferAge: cfg.BreakerMaxDeferAge,
 	})
 	relay := app.NewRelay(app.RelayDeps{
 		Repo: repo, Publisher: publisher, Events: events, Metrics: recorder, Clock: clock, IDs: ids,

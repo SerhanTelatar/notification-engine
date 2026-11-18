@@ -727,7 +727,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - `IsSuccessful` returns true for success and permanent outcomes
   - expose `State()` and the remaining cool-down; update the `circuit_breaker_state` gauge on
     state change (R9)
-- [ ] T093 [US7] (analysis finding D1) Implement the breaker-open deferral in `internal/app/deliver.go`:
+- [X] T093 [US7] (analysis finding D1) Implement the breaker-open deferral in `internal/app/deliver.go`:
   `queued → sending → retrying` in one tx via `DeferSending`, without incrementing
   `data-model.md notifications.attempts`. `ErrOpenState`/`ErrTooManyRequests` take the same path.
   Past `BREAKER_MAX_DEFER_AGE`, `DeferSending` instead moves `sending → failed`, setting

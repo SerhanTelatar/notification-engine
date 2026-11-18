@@ -90,7 +90,10 @@ func TestBreakerOpensIsolatesTheChannelAndRecovers(t *testing.T) {
 	}
 	waitFor(t, 10*time.Second, "sms breaker open", func() bool { return states.last(domain.ChannelSMS) == 2 })
 
-	// Open: no sms attempts are consumed (deferrals only) during less than one cool-down.
+	// Open: no sms attempts are consumed (deferrals only) during less than one cool-down. Calls that
+	// were already in flight when it opened still finish and record their attempts, so let those
+	// settle before taking the baseline (still well inside the 2 s cool-down).
+	time.Sleep(300 * time.Millisecond)
 	frozen := smsAttempts(t)
 	time.Sleep(time.Second)
 	if now := smsAttempts(t); now != frozen {
