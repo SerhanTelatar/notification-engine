@@ -559,7 +559,7 @@ items not early (quickstart #11).
   - 0 or 1,001 items → error
   - duplicate idempotency keys inside the batch → later items resolve to the first item's id
   - `GetBatch`: counts per status sum to the accepted total; unknown id → `ErrNotFound`
-- [ ] T072 [P] [US4] Write the batch integration test in `test/integration/api_batch_test.go`:
+- [X] T072 [P] [US4] Write the batch integration test in `test/integration/api_batch_test.go`:
   - 7/3 partial; 1,000 valid acknowledged in < 2 s (SC-002)
   - 1,001 → 400; all invalid → 400 and no `batches` row
   - `GET /batches/{id}` counts sum to the accepted total; unknown → 404
