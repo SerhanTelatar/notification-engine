@@ -800,7 +800,7 @@ any bonus work.
   `/readyz` 503 and `/healthz` 200. Through a TCP proxy: cutting the broker makes the supervisor's
   readiness check fail while it keeps running; restoring it starts a new session on a new
   connection and readiness recovers; cancelling ctx stops it cleanly.
-- [ ] T122 Implement `internal/adapters/rabbitmq/supervisor.go`: dial and declare the topology,
+- [X] T122 Implement `internal/adapters/rabbitmq/supervisor.go`: dial and declare the topology,
   run the AMQP-bound components (relay, reaper, sampler, consumers) as one session per connection,
   and on connection loss cancel the session and redial with capped exponential backoff. Wire it in
   `cmd/worker/main.go` with the ops server outside the session, and readiness from the
