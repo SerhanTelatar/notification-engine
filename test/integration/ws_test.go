@@ -68,8 +68,11 @@ func (s wsStack) dial(t *testing.T, query string) *websocket.Conn {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	c, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(s.api.URL, "http")+"/ws?"+query, nil)
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	if err != nil {
-		t.Fatalf("dial %s: %v (resp %v)", query, err, resp)
+		t.Fatalf("dial %s: %v", query, err)
 	}
 	t.Cleanup(func() { _ = c.CloseNow() })
 	return c
@@ -107,6 +110,9 @@ func TestWSRejectsBadSubscriptions(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(s.api.URL, "http")+"/ws?"+query, nil)
 		cancel()
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
 		if err == nil || resp == nil || resp.StatusCode != want {
 			code := 0
 			if resp != nil {
