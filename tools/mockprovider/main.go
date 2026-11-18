@@ -105,6 +105,7 @@ func main() {
 }
 
 func (m *mock) send(w http.ResponseWriter, r *http.Request) {
+	arrived := time.Now().UTC() // before any simulated latency: this is when the request arrived
 	var body struct{ To, Channel, Content string }
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -128,7 +129,7 @@ func (m *mock) send(w http.ResponseWriter, r *http.Request) {
 
 	m.mu.Lock()
 	if len(m.received) < maxRecorded {
-		m.received = append(m.received, received{At: time.Now().UTC(), To: body.To, Channel: body.Channel,
+		m.received = append(m.received, received{At: arrived, To: body.To, Channel: body.Channel,
 			Content: body.Content, IdempotencyKey: r.Header.Get("Idempotency-Key"),
 			CorrelationID: r.Header.Get("X-Correlation-ID"), Status: status})
 	}

@@ -34,10 +34,15 @@ done
 echo
 
 curl -fsS "$MOCK_URL/received?channel=sms" | python3 -c '
-import sys, json, collections
+import sys, json, collections, re
 from datetime import datetime
+def parse(s):
+    # Go emits 0-9 fractional digits; older Pythons only accept exactly 6 in fromisoformat.
+    m = re.match(r"(.*?)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$", s)
+    tz = "+00:00" if m.group(3) == "Z" else m.group(3)
+    return datetime.fromisoformat(m.group(1) + tz).timestamp() + float("0." + (m.group(2) or "0"))
 items = json.load(sys.stdin)["items"]
-ts = sorted(datetime.fromisoformat(i["at"].replace("Z", "+00:00")).timestamp() for i in items)
+ts = sorted(parse(i["at"]) for i in items)
 per_sec = collections.Counter(int(t) for t in ts)
 lo = 0; peak = 0
 for hi in range(len(ts)):
@@ -47,4 +52,6 @@ span = ts[-1] - ts[0] if len(ts) > 1 else 0
 print(f"provider received {len(ts)} in {span:.1f}s: {len(ts)/span if span else 0:.1f}/s on average")
 print(f"peak in any sliding 1 s window: {peak}")
 print("busiest calendar seconds:", ", ".join(str(v) for _, v in per_sec.most_common(5)))
+start = int(ts[0])
+print("per second:", " ".join(str(per_sec.get(s, 0)) for s in range(start, int(ts[-1]) + 1)))
 '
