@@ -28,26 +28,7 @@ func (s *Server) CreateNotification(ctx context.Context, req gen.CreateNotificat
 		return nil, err
 	}
 
-	cr := app.CreateRequest{
-		Recipient:      b.Recipient,
-		Channel:        string(b.Channel),
-		Content:        b.Content,
-		ScheduledAt:    b.ScheduledAt,
-		IdempotencyKey: key,
-		CorrelationID:  logger.CorrelationID(ctx),
-	}
-	if b.Priority != nil {
-		cr.Priority = string(*b.Priority)
-	}
-	if b.TemplateId != nil {
-		id := b.TemplateId.String()
-		cr.TemplateID = &id
-	}
-	if b.Variables != nil {
-		cr.Variables = *b.Variables
-	}
-
-	res, err := s.create.Create(ctx, cr)
+	res, err := s.create.Create(ctx, fromAPIRequest(b, key, logger.CorrelationID(ctx)))
 	if err != nil {
 		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler
 	}
@@ -70,6 +51,29 @@ func (s *Server) GetNotification(ctx context.Context, req gen.GetNotificationReq
 		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler
 	}
 	return gen.GetNotification200JSONResponse(toAPIDetail(d)), nil
+}
+
+// fromAPIRequest maps one NotificationRequest (single create or batch item) to the use case.
+func fromAPIRequest(b *gen.NotificationRequest, key *string, correlationID string) app.CreateRequest {
+	cr := app.CreateRequest{
+		Recipient:      b.Recipient,
+		Channel:        string(b.Channel),
+		Content:        b.Content,
+		ScheduledAt:    b.ScheduledAt,
+		IdempotencyKey: key,
+		CorrelationID:  correlationID,
+	}
+	if b.Priority != nil {
+		cr.Priority = string(*b.Priority)
+	}
+	if b.TemplateId != nil {
+		id := b.TemplateId.String()
+		cr.TemplateID = &id
+	}
+	if b.Variables != nil {
+		cr.Variables = *b.Variables
+	}
+	return cr
 }
 
 // mergeIdempotencyKey accepts the key from the Idempotency-Key header or the body field. Both are

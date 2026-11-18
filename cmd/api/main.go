@@ -75,7 +75,9 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	})
 
 	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker, Creator: creator,
-		Query: app.NewQuery(app.QueryDeps{Repo: repo})}))
+		Query: app.NewQuery(app.QueryDeps{Repo: repo}),
+		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(pool), IDs: noop.UUIDv7{}, Clock: noop.Clock{},
+			Events: noop.Broadcaster{}, Log: log, MaxAttempts: cfg.MaxAttempts})}))
 	httpapi.MountOps(router, reg, api.Spec)
 	srv := httpapi.NewHTTPServer(cfg.HTTPAddr, router)
 

@@ -577,7 +577,7 @@ items not early (quickstart #11).
     notifications.idempotency_key`, `data-model.md notifications.batch_id`)
 - [X] T075 [US4] Implement `CreateBatch` and `GetBatch` in `internal/app/batch.go`. Each accepted
   item inherits the request correlation id. Broadcast a created event per item. Makes T071 pass.
-- [ ] T076 [US4] Implement the `createBatch` and `getBatch` handlers in
+- [X] T076 [US4] Implement the `createBatch` and `getBatch` handlers in
   `internal/adapters/http/batches.go`, mapping to the `BatchCreateResult` and `BatchDetail`
   schemas. Makes T072 pass.
 

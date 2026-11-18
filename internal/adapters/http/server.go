@@ -38,6 +38,7 @@ type Deps struct {
 	Health  *health.Checker
 	Creator *app.Creator
 	Query   *app.Query
+	Batcher *app.Batcher
 }
 
 // Server implements gen.StrictServerInterface. Operations not built yet return errNotImplemented.
@@ -46,13 +47,14 @@ type Server struct {
 	health *health.Checker
 	create *app.Creator
 	query  *app.Query
+	batch  *app.Batcher
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
 // NewServer returns the strict-server implementation.
 func NewServer(d Deps) *Server {
-	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query}
+	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher}
 }
 
 // NewRouter mounts the generated routes on chi.
@@ -89,14 +91,6 @@ func (s *Server) ListNotifications(context.Context, gen.ListNotificationsRequest
 }
 
 func (s *Server) CancelNotification(context.Context, gen.CancelNotificationRequestObject) (gen.CancelNotificationResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) CreateBatch(context.Context, gen.CreateBatchRequestObject) (gen.CreateBatchResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) GetBatch(context.Context, gen.GetBatchRequestObject) (gen.GetBatchResponseObject, error) {
 	return nil, errNotImplemented
 }
 
