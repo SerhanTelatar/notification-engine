@@ -307,10 +307,12 @@ func TestRateLimiterHeadroomWidensSlotSpacing(t *testing.T) {
 	defer cancel()
 	slots := acquireFor(ctx, []*redisadapter.RateLimiter{l}, 4, domain.ChannelSMS)
 	sort.Slice(slots, func(i, j int) bool { return slots[i].Before(slots[j]) })
-	for i := 1; i < len(slots); i++ {
-		if gap := slots[i].Sub(slots[i-1]); gap < 55*time.Millisecond-2*time.Millisecond {
-			t.Fatalf("slots %d and %d are %v apart, want >= 55ms", i-1, i, gap)
-		}
+	// Returned slot times are local estimates (reply time + wait), so a single gap can be off by the
+	// jitter of one Redis reply; the mean spacing is what the headroom controls.
+	mean := slots[len(slots)-1].Sub(slots[0]) / time.Duration(len(slots)-1)
+	t.Logf("%d slots, mean spacing %v", len(slots), mean)
+	if mean < 54*time.Millisecond || mean > 57*time.Millisecond {
+		t.Fatalf("mean slot spacing %v, want about 55ms (50ms x 1.10)", mean)
 	}
 	if len(slots) < 34 || len(slots) > 38 {
 		t.Fatalf("%d slots in 2 s, want about 36 (20/s / 1.1)", len(slots))
