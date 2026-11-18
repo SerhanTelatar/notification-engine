@@ -40,7 +40,7 @@ green.
   - `go` and `toolchain` directives set to the latest stable Go
   - `tool` directives for oapi-codegen, sqlc, goose and golangci-lint (R1)
   - `.gitignore` for `bin/`, `.env` and coverage files
-- [ ] T002 [P] Create `Makefile` with targets `gen`, `migrate`, `build`, `up`, `down`, `test`
+- [X] T002 [P] Create `Makefile` with targets `gen`, `migrate`, `build`, `up`, `down`, `test`
   (`go test -race -tags integration ./...`), `test-unit`, `lint`, `demo-burst` and `gen-check`
   (`make gen && git diff --exit-code`). Each target must also run inside the `golang` image when
   `DOCKER=1` (R1).
