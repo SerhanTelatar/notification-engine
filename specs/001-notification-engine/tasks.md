@@ -896,7 +896,7 @@ including transitions made by the worker.
   `internal/adapters/redis/status.go`: `ports.StatusBroadcaster` publishes to
   `notification-status` with the payload from `contracts/events.md` §2, best-effort with a
   timeout; `Subscribe(ctx)` returns a channel of events.
-- [ ] T113 [US9] Implement the hub in `internal/adapters/ws/hub.go` (indexes by notification and
+- [X] T113 [US9] Implement the hub in `internal/adapters/ws/hub.go` (indexes by notification and
   batch id, per-client bounded buffer) and the `/ws` handler in `internal/adapters/http/ws.go`:
   - validate params and existence (via `GetNotification`/`GetBatch`) before the upgrade
   - `coder/websocket` accept
