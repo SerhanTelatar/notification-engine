@@ -879,7 +879,7 @@ including transitions made by the worker.
 
 ### Tests for User Story 9 ⚠️
 
-- [ ] T110 [P] [US9] Write hub unit tests in `internal/adapters/ws/hub_test.go`:
+- [X] T110 [P] [US9] Write hub unit tests in `internal/adapters/ws/hub_test.go`:
   - fan-out by notification id and by batch id
   - unsubscribe on disconnect
   - a full 64-message buffer → the client is closed with 1008
