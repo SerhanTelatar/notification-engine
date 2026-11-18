@@ -444,7 +444,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
     `DELETE /received`, the env defaults and the per-request headers, all per
     `contracts/provider.md`
   - add the `mockprovider` service to `docker-compose.yml`
-- [ ] T059 [US1] Wire the worker in `cmd/worker/main.go`:
+- [X] T059 [US1] Wire the worker in `cmd/worker/main.go`:
   - AMQP connection + topology
   - the relay ticker (`RELAY_INTERVAL`)
   - a consumer per channel calling `Deliver`

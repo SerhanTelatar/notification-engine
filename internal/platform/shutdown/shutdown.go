@@ -115,3 +115,23 @@ func serve(ctx context.Context, srv *http.Server, ln net.Listener, drain time.Du
 		return nil
 	}
 }
+
+// Every runs tick every interval until ctx is cancelled (relay, reaper, sampler). A tick that
+// returns an error is reported through onError and the loop keeps going: the next tick retries.
+// A tick that is still running when ctx is cancelled is allowed to finish.
+func Every(name string, interval time.Duration, tick func(context.Context) error, onError func(error)) Component {
+	return Component{Name: name, Run: func(ctx context.Context) error {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-t.C:
+				if err := tick(ctx); err != nil && onError != nil && ctx.Err() == nil {
+					onError(err)
+				}
+			}
+		}
+	}}
+}
