@@ -85,8 +85,30 @@ func (r *memBatchRepo) GetBatch(_ context.Context, id string) (*domain.Batch, po
 	return &b, counts, items, nil
 }
 
-func (r *memBatchRepo) CancelBatch(context.Context, string, time.Time) (ports.BatchCancelResult, error) {
-	return ports.BatchCancelResult{}, errors.New("memBatchRepo.CancelBatch: not needed by these tests")
+func (r *memBatchRepo) CancelBatch(_ context.Context, id string, at time.Time) (ports.BatchCancelResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.batches[id]; !ok {
+		return ports.BatchCancelResult{}, domain.ErrNotFound
+	}
+	var res ports.BatchCancelResult
+	for _, n := range r.rows {
+		if n.BatchID == nil || *n.BatchID != id {
+			continue
+		}
+		switch prev := n.Status; {
+		case prev == domain.StatusCancelled:
+			res.AlreadyCancelled++
+		case prev.In(domain.CancellableFrom):
+			cancelledAt := at
+			n.Status, n.CancelledAt = domain.StatusCancelled, &cancelledAt
+			res.Cancelled++
+			res.Rows = append(res.Rows, ports.CancelOutcome{Notification: clone(n), Previous: prev, Changed: true})
+		default:
+			res.NotCancellable++
+		}
+	}
+	return res, nil
 }
 
 type batchFixture struct {

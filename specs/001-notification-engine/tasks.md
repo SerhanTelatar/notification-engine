@@ -595,7 +595,7 @@ both times and never received; cancel a `sent` one → 409 with `current_status`
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T077 [P] [US5] Write unit tests for the cancel use case in `internal/app/cancel_test.go`:
+- [X] T077 [P] [US5] Write unit tests for the cancel use case in `internal/app/cancel_test.go`:
   - each cancellable status → `cancelled` (`domain.CancellableFrom`)
   - `sending`/`sent`/`failed` → `ErrNotCancellable` with the current status
   - already `cancelled` → success with no change
