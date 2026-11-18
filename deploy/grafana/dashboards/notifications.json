@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -50,7 +50,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "Delivery rate by outcome",
-      "description": "Provider call outcomes per second; success should sit at ~95/s per channel under load (limit 100).",
+      "description": "Provider call outcomes per second; success should sit at ~95/s per channel under load (limit 100). Rates use $__rate_interval (20 s at the 5 s scrape interval): sustained load shows at its real speed, but a burst shorter than ~20 s is averaged over 20 s, so it looks lower and longer than it was.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -73,7 +73,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (channel, outcome) (rate(notifications_delivered_total[1m]))",
+          "expr": "sum by (channel, outcome) (rate(notifications_delivered_total[$__rate_interval]))",
           "legendFormat": "{{channel}} {{outcome}}",
           "refId": "A"
         }
@@ -254,7 +254,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (channel) (rate(notification_retries_total[1m]))",
+          "expr": "sum by (channel) (rate(notification_retries_total[$__rate_interval]))",
           "legendFormat": "retry {{channel}}",
           "refId": "A"
         },
@@ -263,7 +263,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (channel, reason) (rate(notifications_dead_lettered_total[1m]))",
+          "expr": "sum by (channel, reason) (rate(notifications_dead_lettered_total[$__rate_interval]))",
           "legendFormat": "dead-letter {{channel}} {{reason}}",
           "refId": "B"
         }
@@ -373,7 +373,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (channel) (rate(rate_limiter_timeouts_total[1m]))",
+          "expr": "sum by (channel) (rate(rate_limiter_timeouts_total[$__rate_interval]))",
           "legendFormat": "timeouts/s {{channel}}",
           "refId": "B"
         }
@@ -406,7 +406,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (channel) (rate(relay_published_total[1m]))",
+          "expr": "sum by (channel) (rate(relay_published_total[$__rate_interval]))",
           "legendFormat": "published/s {{channel}}",
           "refId": "A"
         },
@@ -415,7 +415,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (channel) (rate(relay_backpressure_skips_total[1m]))",
+          "expr": "sum by (channel) (rate(relay_backpressure_skips_total[$__rate_interval]))",
           "legendFormat": "skips/s {{channel}}",
           "refId": "B"
         },
@@ -424,7 +424,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (kind) (rate(reaper_recovered_total[5m]))",
+          "expr": "sum by (kind) (rate(reaper_recovered_total[$__rate_interval]))",
           "legendFormat": "reaped/s {{kind}}",
           "refId": "C"
         }
