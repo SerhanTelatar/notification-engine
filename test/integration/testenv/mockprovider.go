@@ -22,6 +22,7 @@ type Received struct {
 	Content        string `json:"content"`
 	IdempotencyKey string
 	CorrelationID  string
+	TraceParent    string // W3C traceparent header, when the caller traces
 }
 
 // Response is what the mock returns for one request.
@@ -87,6 +88,7 @@ func (m *MockProvider) handle(w http.ResponseWriter, r *http.Request) {
 	rec.At = time.Now()
 	rec.IdempotencyKey = r.Header.Get("Idempotency-Key")
 	rec.CorrelationID = r.Header.Get("X-Correlation-ID")
+	rec.TraceParent = r.Header.Get("Traceparent")
 
 	m.mu.Lock()
 	n := len(m.received)

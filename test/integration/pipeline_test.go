@@ -17,6 +17,7 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/rabbitmq"
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/tracing"
 	"github.com/SerhanTelatar/notification-engine/internal/ports"
 )
 
@@ -44,6 +45,7 @@ type pipelineConfig struct {
 	maxDeferAge     time.Duration           // BREAKER_MAX_DEFER_AGE; 0 = none
 	log             *slog.Logger            // nil = quiet
 	events          ports.StatusBroadcaster // nil = pass-through
+	tracing         *tracing.Tracing        // nil = off
 }
 
 func defaultPipeline(providerURL string) pipelineConfig {
