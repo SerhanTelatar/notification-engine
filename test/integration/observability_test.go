@@ -150,12 +150,12 @@ func contractMetrics(t testing.TB) map[string][]string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	row := regexp.MustCompile("(?m)^\\| `([a-z_]+)` \\| \\w+ \\| [^|]+\\| (api|worker)")
+	row := regexp.MustCompile("(?m)^\\| `([a-z0-9_]+)` \\| \\w+ \\| [^|]+\\| (api|worker)")
 	out := map[string][]string{}
 	for _, m := range row.FindAllStringSubmatch(string(b), -1) {
 		out[m[2]] = append(out[m[2]], m[1])
 	}
-	if len(out["api"]) < 4 || len(out["worker"]) < 13 {
+	if len(out["api"]) != 4 || len(out["worker"]) != 13 {
 		t.Fatalf("contract table not parsed: %v", out)
 	}
 	return out
