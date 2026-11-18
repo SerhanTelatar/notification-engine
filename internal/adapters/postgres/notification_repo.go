@@ -328,14 +328,52 @@ func (r *NotificationRepo) ListAttempts(ctx context.Context, id string) ([]domai
 	return out, nil
 }
 
+// Cancel cancels one notification if its status allows it (FR-013). The row is locked first, so
+// a cancel that races an open relay transaction waits for its commit and decides on the committed
+// status (the same reason as StartSending).
+func (r *NotificationRepo) Cancel(ctx context.Context, id string, at time.Time) (ports.CancelOutcome, error) {
+	uid, err := parseID(id)
+	if err != nil {
+		return ports.CancelOutcome{}, err
+	}
+	var out ports.CancelOutcome
+	err = WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		prev, err := q.LockForClaim(ctx, uid)
+		if err != nil {
+			return translate(err, "lock for cancel")
+		}
+		previous, err := domain.ParseStatus(prev)
+		if err != nil {
+			return fmt.Errorf("notification %s: %w", id, err)
+		}
+		out.Previous = previous
+		if previous.In(domain.CancellableFrom) {
+			row, err := q.CancelNotification(ctx, sqlcgen.CancelNotificationParams{ID: uid, Now: at})
+			if err != nil {
+				return translate(err, "cancel")
+			}
+			out.Changed = true
+			out.Notification, err = toDomain(row)
+			return err
+		}
+		row, err := q.GetNotification(ctx, uid)
+		if err != nil {
+			return translate(err, "read notification")
+		}
+		out.Notification, err = toDomain(row)
+		return err
+	})
+	if err != nil {
+		return ports.CancelOutcome{}, err
+	}
+	return out, nil
+}
+
 // --- Arriving with later user stories ---------------------------------------------------------
 
 func (r *NotificationRepo) List(context.Context, ports.ListFilter) ([]domain.Notification, error) {
 	return nil, fmt.Errorf("list notifications (US6): %w", errNotYet)
-}
-
-func (r *NotificationRepo) Cancel(context.Context, string, time.Time) (*domain.Notification, bool, error) {
-	return nil, false, fmt.Errorf("cancel (US5): %w", errNotYet)
 }
 
 func (r *NotificationRepo) BacklogCounts(context.Context) ([]ports.BacklogCount, error) {

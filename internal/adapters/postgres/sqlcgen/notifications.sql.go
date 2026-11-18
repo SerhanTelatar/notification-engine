@@ -12,6 +12,110 @@ import (
 	"github.com/google/uuid"
 )
 
+const cancelMany = `-- name: CancelMany :many
+UPDATE notifications
+SET status = 'cancelled', cancelled_at = $1::timestamptz, updated_at = $1::timestamptz
+WHERE id = ANY($2::uuid[]) AND status IN ('pending', 'scheduled', 'queued', 'retrying')
+RETURNING id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at
+`
+
+type CancelManyParams struct {
+	Now time.Time
+	Ids []uuid.UUID
+}
+
+func (q *Queries) CancelMany(ctx context.Context, arg CancelManyParams) ([]Notification, error) {
+	rows, err := q.db.Query(ctx, cancelMany, arg.Now, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Notification{}
+	for rows.Next() {
+		var i Notification
+		if err := rows.Scan(
+			&i.ID,
+			&i.BatchID,
+			&i.IdempotencyKey,
+			&i.PayloadHash,
+			&i.Channel,
+			&i.Recipient,
+			&i.Content,
+			&i.Priority,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.NextAttemptAt,
+			&i.ScheduledAt,
+			&i.TemplateID,
+			&i.TemplateVars,
+			&i.ProviderMessageID,
+			&i.LastError,
+			&i.CorrelationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SentAt,
+			&i.CancelledAt,
+			&i.FailedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const cancelNotification = `-- name: CancelNotification :one
+
+UPDATE notifications
+SET status = 'cancelled', cancelled_at = $1::timestamptz, updated_at = $1::timestamptz
+WHERE id = $2 AND status IN ('pending', 'scheduled', 'queued', 'retrying')
+RETURNING id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at
+`
+
+type CancelNotificationParams struct {
+	Now time.Time
+	ID  uuid.UUID
+}
+
+// ---------------------------------------------------------------------------------------------
+// Cancellation (US5, FR-013/014/015). Same lock-then-guard pattern as the claim: LockForClaim
+// waits for an open relay transaction, so the guard sees the committed status.
+// ---------------------------------------------------------------------------------------------
+func (q *Queries) CancelNotification(ctx context.Context, arg CancelNotificationParams) (Notification, error) {
+	row := q.db.QueryRow(ctx, cancelNotification, arg.Now, arg.ID)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.BatchID,
+		&i.IdempotencyKey,
+		&i.PayloadHash,
+		&i.Channel,
+		&i.Recipient,
+		&i.Content,
+		&i.Priority,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.NextAttemptAt,
+		&i.ScheduledAt,
+		&i.TemplateID,
+		&i.TemplateVars,
+		&i.ProviderMessageID,
+		&i.LastError,
+		&i.CorrelationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SentAt,
+		&i.CancelledAt,
+		&i.FailedAt,
+	)
+	return i, err
+}
+
 const countQueued = `-- name: CountQueued :one
 SELECT count(*)::int AS queued FROM notifications WHERE channel = $1 AND status = 'queued'
 `
@@ -281,6 +385,35 @@ func (q *Queries) ListAttempts(ctx context.Context, notificationID uuid.UUID) ([
 			&i.Outcome,
 			&i.Error,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockBatchItems = `-- name: LockBatchItems :many
+SELECT id, status FROM notifications WHERE batch_id = $1 ORDER BY id FOR UPDATE
+`
+
+type LockBatchItemsRow struct {
+	ID     uuid.UUID
+	Status string
+}
+
+func (q *Queries) LockBatchItems(ctx context.Context, batchID *uuid.UUID) ([]LockBatchItemsRow, error) {
+	rows, err := q.db.Query(ctx, lockBatchItems, batchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LockBatchItemsRow{}
+	for rows.Next() {
+		var i LockBatchItemsRow
+		if err := rows.Scan(&i.ID, &i.Status); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -108,9 +108,10 @@ type NotificationRepository interface {
 	ListAttempts(ctx context.Context, id string) ([]domain.Attempt, error)
 	List(ctx context.Context, f ListFilter) ([]domain.Notification, error)
 
-	// Cancel moves a cancellable notification to cancelled. When nothing changed it returns the
-	// current row and changed=false.
-	Cancel(ctx context.Context, id string, at time.Time) (n *domain.Notification, changed bool, err error)
+	// Cancel moves a cancellable notification to cancelled. When nothing changed (already
+	// cancelled, or not cancellable) it returns the current row with Changed=false. An unknown id
+	// is domain.ErrNotFound.
+	Cancel(ctx context.Context, id string, at time.Time) (CancelOutcome, error)
 
 	// RelayTx runs one channel's relay pass in a single transaction (research R4): advisory lock,
 	// count queued, quota(queued) rows picked FOR UPDATE SKIP LOCKED, mark queued, publish, then
@@ -138,6 +139,14 @@ type BatchCancelResult struct {
 	Cancelled        int
 	AlreadyCancelled int
 	NotCancellable   int
+	Rows             []CancelOutcome // the notifications this call cancelled
+}
+
+// CancelOutcome is the result of cancelling one notification.
+type CancelOutcome struct {
+	Notification *domain.Notification
+	Previous     domain.Status // status before the call
+	Changed      bool
 }
 
 // BatchItemKind is what happened to one batch item in the database.

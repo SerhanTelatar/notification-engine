@@ -156,9 +156,62 @@ func (r *BatchRepo) GetBatch(ctx context.Context, id string) (*domain.Batch, por
 	return b, counts, items, nil
 }
 
-// CancelBatch arrives with US5.
-func (r *BatchRepo) CancelBatch(context.Context, string, time.Time) (ports.BatchCancelResult, error) {
-	return ports.BatchCancelResult{}, fmt.Errorf("cancel batch (US5): %w", errNotYet)
+// CancelBatch cancels every cancellable notification of a batch in one transaction and counts
+// the rest (FR-015). The items are locked first, so open relay transactions finish before the
+// decision.
+func (r *BatchRepo) CancelBatch(ctx context.Context, id string, at time.Time) (ports.BatchCancelResult, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return ports.BatchCancelResult{}, fmt.Errorf("batch id %q: %w", id, domain.ErrNotFound)
+	}
+	var res ports.BatchCancelResult
+	err = WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		if _, err := q.GetBatch(ctx, uid); err != nil {
+			return translate(err, "get batch")
+		}
+		locked, err := q.LockBatchItems(ctx, &uid)
+		if err != nil {
+			return translate(err, "lock batch items")
+		}
+		previous := make(map[uuid.UUID]domain.Status, len(locked))
+		var ids []uuid.UUID
+		for _, row := range locked {
+			st, err := domain.ParseStatus(row.Status)
+			if err != nil {
+				return fmt.Errorf("batch %s: %w", id, err)
+			}
+			switch {
+			case st == domain.StatusCancelled:
+				res.AlreadyCancelled++
+			case st.In(domain.CancellableFrom):
+				previous[row.ID] = st
+				ids = append(ids, row.ID)
+			default:
+				res.NotCancellable++
+			}
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		rows, err := q.CancelMany(ctx, sqlcgen.CancelManyParams{Ids: ids, Now: at})
+		if err != nil {
+			return translate(err, "cancel batch items")
+		}
+		for _, row := range rows {
+			n, err := toDomain(row)
+			if err != nil {
+				return err
+			}
+			res.Rows = append(res.Rows, ports.CancelOutcome{Notification: n, Previous: previous[row.ID], Changed: true})
+		}
+		res.Cancelled = len(rows)
+		return nil
+	})
+	if err != nil {
+		return ports.BatchCancelResult{}, err
+	}
+	return res, nil
 }
 
 // bulkParams turns items into parallel arrays. Nullable columns use the sentinels documented in

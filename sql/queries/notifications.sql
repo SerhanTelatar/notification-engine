@@ -135,3 +135,23 @@ SELECT * FROM notifications WHERE id = @id;
 
 -- name: ListAttempts :many
 SELECT * FROM notification_attempts WHERE notification_id = @notification_id ORDER BY attempt_no;
+
+-- ---------------------------------------------------------------------------------------------
+-- Cancellation (US5, FR-013/014/015). Same lock-then-guard pattern as the claim: LockForClaim
+-- waits for an open relay transaction, so the guard sees the committed status.
+-- ---------------------------------------------------------------------------------------------
+
+-- name: CancelNotification :one
+UPDATE notifications
+SET status = 'cancelled', cancelled_at = @now::timestamptz, updated_at = @now::timestamptz
+WHERE id = @id AND status IN ('pending', 'scheduled', 'queued', 'retrying')
+RETURNING *;
+
+-- name: LockBatchItems :many
+SELECT id, status FROM notifications WHERE batch_id = @batch_id ORDER BY id FOR UPDATE;
+
+-- name: CancelMany :many
+UPDATE notifications
+SET status = 'cancelled', cancelled_at = @now::timestamptz, updated_at = @now::timestamptz
+WHERE id = ANY(@ids::uuid[]) AND status IN ('pending', 'scheduled', 'queued', 'retrying')
+RETURNING *;

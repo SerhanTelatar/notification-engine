@@ -611,7 +611,7 @@ both times and never received; cancel a `sent` one → 409 with `current_status`
 
 ### Implementation for User Story 5
 
-- [ ] T079 [US5] Add `CancelNotification` (guarded by
+- [X] T079 [US5] Add `CancelNotification` (guarded by
   `status IN (pending, scheduled, queued, retrying) RETURNING *`, sets `data-model.md
   notifications.cancelled_at`) and `CancelBatch` (`RETURNING id`, plus counts of the remaining
   statuses) to `sql/queries/notifications.sql`. Run `make gen` and implement them in
