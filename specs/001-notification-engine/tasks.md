@@ -772,7 +772,7 @@ DLQ, verified by T087 and T088.
 **Purpose**: per Constitution VII, finish the required features (tested and documented) before
 any bonus work.
 
-- [ ] T098 Write `README.md`:
+- [X] T098 Write `README.md`:
   - setup (`docker compose up`)
   - a "Bugs caught by tests" section from `specs/001-notification-engine/readme-backlog.md`
     (starting with the FOR UPDATE claim fix in `be59a7b`); delete the backlog file once moved
