@@ -318,7 +318,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - stale `sending` → `retrying` with an `abandoned` attempt and attempts+1
   - stale `sending` at max attempts → `failed`
   - stale `queued` → republished with no status change
-- [ ] T041 [P] [US1] Write the repository integration tests in
+- [X] T041 [P] [US1] Write the repository integration tests in
   `test/integration/notification_repo_test.go`:
   - idempotent insert (same and different payload)
   - 20 concurrent inserts with the same key → 1 row
