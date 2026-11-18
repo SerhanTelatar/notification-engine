@@ -34,11 +34,12 @@ var errNotImplemented = errors.New("operation not implemented yet")
 // Deps are the use cases and services behind the API. A nil use case means its operation
 // returns 501 until its user story lands.
 type Deps struct {
-	Log     *slog.Logger
-	Health  *health.Checker
-	Creator *app.Creator
-	Query   *app.Query
-	Batcher *app.Batcher
+	Log       *slog.Logger
+	Health    *health.Checker
+	Creator   *app.Creator
+	Query     *app.Query
+	Batcher   *app.Batcher
+	Canceller *app.Canceller
 }
 
 // Server implements gen.StrictServerInterface. Operations not built yet return errNotImplemented.
@@ -48,13 +49,14 @@ type Server struct {
 	create *app.Creator
 	query  *app.Query
 	batch  *app.Batcher
+	cancel *app.Canceller
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
 // NewServer returns the strict-server implementation.
 func NewServer(d Deps) *Server {
-	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher}
+	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher, cancel: d.Canceller}
 }
 
 // NewRouter mounts the generated routes on chi.
@@ -87,14 +89,6 @@ func NewHTTPServer(addr string, h http.Handler) *http.Server {
 // --- Operations: each returns errNotImplemented until its user story lands. ---
 
 func (s *Server) ListNotifications(context.Context, gen.ListNotificationsRequestObject) (gen.ListNotificationsResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) CancelNotification(context.Context, gen.CancelNotificationRequestObject) (gen.CancelNotificationResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) CancelBatch(context.Context, gen.CancelBatchRequestObject) (gen.CancelBatchResponseObject, error) {
 	return nil, errNotImplemented
 }
 

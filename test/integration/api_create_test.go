@@ -33,7 +33,9 @@ func newAPI(t testing.TB) *httptest.Server {
 	srv := httpapi.NewServer(httpapi.Deps{Log: quietLog, Health: health.New(0), Creator: creator,
 		Query: app.NewQuery(app.QueryDeps{Repo: repo}),
 		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(env.Pool), IDs: noop.UUIDv7{}, Clock: noop.Clock{},
-			Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5})})
+			Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5}),
+		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(env.Pool),
+			Events: noop.Broadcaster{}, Clock: noop.Clock{}, Log: quietLog})})
 	ts := httptest.NewServer(httpapi.NewRouter(quietLog, srv))
 	t.Cleanup(ts.Close)
 	return ts

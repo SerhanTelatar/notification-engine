@@ -53,6 +53,20 @@ func (s *Server) GetNotification(ctx context.Context, req gen.GetNotificationReq
 	return gen.GetNotification200JSONResponse(toAPIDetail(d)), nil
 }
 
+// CancelNotification cancels one notification (FR-013): 200 with the cancelled notification
+// (also when it was already cancelled), 409 with current_status when it can't be, 404 when
+// unknown.
+func (s *Server) CancelNotification(ctx context.Context, req gen.CancelNotificationRequestObject) (gen.CancelNotificationResponseObject, error) {
+	if s.cancel == nil {
+		return nil, errNotImplemented
+	}
+	n, err := s.cancel.Cancel(ctx, req.Id.String())
+	if err != nil {
+		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler
+	}
+	return gen.CancelNotification200JSONResponse(toAPINotification(n)), nil
+}
+
 // fromAPIRequest maps one NotificationRequest (single create or batch item) to the use case.
 func fromAPIRequest(b *gen.NotificationRequest, key *string, correlationID string) app.CreateRequest {
 	cr := app.CreateRequest{

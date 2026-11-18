@@ -75,7 +75,7 @@ func TestCancelRacesDeliveryAndExactlyOneWins(t *testing.T) {
 	api := newAPI(t)
 	mock := testenv.NewMockProvider(t)
 	mock.SetScript(func(int, testenv.Received) testenv.Response {
-		return testenv.Response{Status: 202, Delay: 5 * time.Millisecond}
+		return testenv.Response{Status: 202, Delay: 20 * time.Millisecond}
 	})
 	insertBurst(t, domain.ChannelSMS, "+905551234567", n)
 	rows, err := env.Pool.Query(context.Background(), `SELECT id::text FROM notifications`)
@@ -90,14 +90,19 @@ func TestCancelRacesDeliveryAndExactlyOneWins(t *testing.T) {
 	}
 	rows.Close()
 
-	startPipeline(t, defaultPipeline(mock.SendURL()))
+	cfg := defaultPipeline(mock.SendURL())
+	cfg.concurrency = 5 // about 250/s: the 100 rows drain in ~0.4 s, so cancels land mid-drain
+	startPipeline(t, cfg)
+	// Fire the cancels only once delivery is under way, so some lose to sends and some hit rows
+	// that are being claimed right now.
+	waitFor(t, 10*time.Second, "delivery under way", func() bool { return len(mock.Received()) >= 20 })
 	codes := make([]int, len(ids))
 	var wg sync.WaitGroup
 	for i, id := range ids {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			time.Sleep(time.Duration(i%20) * 3 * time.Millisecond) // spread cancels across the drain
+			time.Sleep(time.Duration(i%10) * 5 * time.Millisecond) // spread cancels across the drain
 			codes[i] = postJSON(t, cancelURL(api.URL, id), ``, nil).code
 		}()
 	}
@@ -136,8 +141,8 @@ func TestCancelRacesDeliveryAndExactlyOneWins(t *testing.T) {
 		}
 	}
 	t.Logf("race: %d cancelled, %d sent, no cancelled notification delivered", cancelled, sent)
-	if cancelled == 0 || sent == 0 {
-		t.Logf("note: the race was one-sided this run (%d/%d); the invariant still held", cancelled, sent)
+	if cancelled == 0 || sent < 20 {
+		t.Fatalf("race not exercised (%d cancelled, %d sent): both outcomes must occur", cancelled, sent)
 	}
 }
 

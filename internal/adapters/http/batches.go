@@ -50,6 +50,19 @@ func (s *Server) CreateBatch(ctx context.Context, req gen.CreateBatchRequestObje
 	return gen.CreateBatch202JSONResponse(out), nil
 }
 
+// CancelBatch cancels every cancellable item of a batch and reports the counts (FR-015).
+func (s *Server) CancelBatch(ctx context.Context, req gen.CancelBatchRequestObject) (gen.CancelBatchResponseObject, error) {
+	if s.cancel == nil {
+		return nil, errNotImplemented
+	}
+	res, err := s.cancel.CancelBatch(ctx, req.Id.String())
+	if err != nil {
+		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler
+	}
+	return gen.CancelBatch200JSONResponse(gen.BatchCancelResult{BatchId: req.Id, Cancelled: res.Cancelled,
+		AlreadyCancelled: res.AlreadyCancelled, NotCancellable: res.NotCancellable}), nil
+}
+
 // GetBatch returns status counts and the batch's notifications (FR-010, spec US2-AS3).
 func (s *Server) GetBatch(ctx context.Context, req gen.GetBatchRequestObject) (gen.GetBatchResponseObject, error) {
 	if s.batch == nil {

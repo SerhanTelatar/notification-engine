@@ -620,7 +620,7 @@ both times and never received; cancel a `sent` one → 409 with `current_status`
   - on 0 rows, read the row to decide 404 / 409 / idempotent 200
   - broadcast `cancelled` events
   - makes T077 pass
-- [ ] T081 [US5] Implement the `cancelNotification` handler in
+- [X] T081 [US5] Implement the `cancelNotification` handler in
   `internal/adapters/http/notifications.go` and the `cancelBatch` handler in
   `internal/adapters/http/batches.go`. The batch cancel needs US4's batches to exist. Makes T078
   pass.
