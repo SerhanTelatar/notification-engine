@@ -642,7 +642,7 @@ filters applied; `limit=101` or a bad cursor → 400 (quickstart #10).
 - [X] T082 [P] [US6] Write unit tests for the cursor in `internal/app/cursor_test.go`: encode and
   decode round-trip of `{created_at, id}` as base64url; malformed, truncated or tampered input →
   `ValidationError` on `cursor`.
-- [ ] T083 [P] [US6] Write the list integration test in `test/integration/api_list_test.go`:
+- [X] T083 [P] [US6] Write the list integration test in `test/integration/api_list_test.go`:
   - 250 rows → 3 pages, newest first, no duplicates or gaps while concurrent inserts happen
   - `status=failed&channel=email` filter; `from`/`to` range (inclusive/exclusive)
   - an empty result → no `next_cursor`
