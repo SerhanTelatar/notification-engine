@@ -28,7 +28,12 @@ func contractMetrics(t *testing.T) map[string]bool {
 }
 
 type panel struct {
-	Title   string `json:"title"`
+	Title       string `json:"title"`
+	FieldConfig struct {
+		Defaults struct {
+			NoValue string `json:"noValue"`
+		} `json:"defaults"`
+	} `json:"fieldConfig"`
 	Targets []struct {
 		Expr string `json:"expr"`
 	} `json:"targets"`
@@ -66,6 +71,16 @@ func TestDashboardUsesContractMetrics(t *testing.T) {
 			t.Errorf("panel %q has no query", p.Title)
 		}
 		for _, tg := range p.Targets {
+			// A percentile over an idle window is NaN, which Grafana draws as nothing at all; the
+			// query must drop it so the panel shows its "no traffic" text instead.
+			if strings.Contains(tg.Expr, "histogram_quantile(") {
+				if !strings.HasSuffix(strings.TrimSpace(tg.Expr), ">= 0") {
+					t.Errorf("panel %q: wrap histogram_quantile in (…) >= 0 so idle windows aren't blank", p.Title)
+				}
+				if p.FieldConfig.Defaults.NoValue == "" {
+					t.Errorf("panel %q: set fieldConfig.defaults.noValue for idle windows", p.Title)
+				}
+			}
 			for _, m := range name.FindAllString(tg.Expr, -1) {
 				base := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(m, "_bucket"), "_count"), "_sum")
 				if !metrics[m] && !metrics[base] {
