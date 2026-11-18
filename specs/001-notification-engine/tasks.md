@@ -308,7 +308,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - an attempt row is written with the outcome
   - no permit within `LIMITER_MAX_WAIT` → a release result (consumer `Nack(requeue=true)`); the row
     stays `queued` and the provider isn't called
-- [ ] T039 [P] [US1] Write unit tests for the relay in `internal/app/relay_test.go` (R4):
+- [X] T039 [P] [US1] Write unit tests for the relay in `internal/app/relay_test.go` (R4):
   - `quota = min(batch, max_inflight − queued)` is never negative
   - quota ≤ 0 → channel skipped and the skip metric incremented
   - lock not acquired → channel skipped
