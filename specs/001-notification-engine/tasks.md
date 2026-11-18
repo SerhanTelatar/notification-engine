@@ -120,7 +120,7 @@ needs.
     normal=2, low=1, default normal)
   - parse/string round-trip tests in `internal/domain/channel_test.go` and
     `internal/domain/priority_test.go`
-- [ ] T019 [P] Implement the state machine in `internal/domain/status.go`
+- [X] T019 [P] Implement the state machine in `internal/domain/status.go`
   (`data-model.md notifications.status`):
   - the 8 statuses, `CanTransition(from, to)`, and the allowed-from sets `CancellableFrom`,
     `DueFrom`, `SendableFrom`
