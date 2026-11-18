@@ -742,7 +742,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
     `notifications_dead_lettered_total` and `notification_e2e_latency_seconds` emitted from
     `internal/app/deliver.go` through `ports.MetricsRecorder` (defined in T023), with a Prometheus
     implementation in `internal/platform/metrics/recorder.go` replacing the noop recorder
-- [ ] T095 [US7] Implement the backlog sampler:
+- [X] T095 [US7] Implement the backlog sampler:
   - `internal/app/sampler.go`, a 5 s tick
   - a `BacklogCounts` query (GROUP BY channel, priority, status on `notifications_backlog_idx`) in
     `sql/queries/notifications.sql`

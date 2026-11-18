@@ -124,6 +124,9 @@ func run(ctx context.Context) error {
 		shutdown.HTTPServer("ops", newOpsServer(cfg.OpsAddr, checker, reg), cfg.ShutdownTimeout),
 		shutdown.Every("relay", cfg.RelayInterval, relay.Tick, logTickError("relay")),
 		shutdown.Every("reaper", cfg.ReaperInterval, reaper.Tick, logTickError("reaper")),
+		shutdown.Every("sampler", app.SampleInterval, app.NewSampler(app.SamplerDeps{
+			Repo: repo, Queues: rabbitmq.NewDepthInspector(conn), Metrics: recorder, Log: log.With("component", "sampler"),
+		}).Tick, logTickError("sampler")),
 	}
 	for _, ch := range domain.Channels {
 		c := rabbitmq.NewConsumer(conn, ch, cfg.ConsumerConcurrencyPerChannel, deliverer.Handle, log)

@@ -172,3 +172,15 @@ WHERE (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text)
        OR (created_at, id) < (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid))
 ORDER BY created_at DESC, id DESC
 LIMIT @page_limit;
+
+-- ---------------------------------------------------------------------------------------------
+-- Backlog gauge (US7, FR-031, research R16)
+-- ---------------------------------------------------------------------------------------------
+
+-- name: BacklogCounts :many
+-- Non-terminal rows only, which notifications_backlog_idx covers, so this is an index-only scan
+-- over the backlog rather than the whole table.
+SELECT channel, priority, status, count(*)::int AS n
+FROM notifications
+WHERE status NOT IN ('sent', 'failed', 'cancelled')
+GROUP BY channel, priority, status;

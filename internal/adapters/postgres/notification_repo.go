@@ -16,9 +16,6 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/ports"
 )
 
-// errNotYet marks repository methods whose user story hasn't landed (US2, US5, US6, US7).
-var errNotYet = errors.New("not implemented yet")
-
 // NotificationRepo implements ports.NotificationRepository on PostgreSQL.
 type NotificationRepo struct {
 	pool *pgxpool.Pool
@@ -404,10 +401,18 @@ func (r *NotificationRepo) List(ctx context.Context, f ports.ListFilter) ([]doma
 	return out, nil
 }
 
-// --- Arriving with later user stories ---------------------------------------------------------
-
-func (r *NotificationRepo) BacklogCounts(context.Context) ([]ports.BacklogCount, error) {
-	return nil, fmt.Errorf("backlog counts (US7): %w", errNotYet)
+// BacklogCounts counts non-terminal notifications by channel, priority and status (FR-031).
+func (r *NotificationRepo) BacklogCounts(ctx context.Context) ([]ports.BacklogCount, error) {
+	rows, err := r.q.BacklogCounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("backlog counts: %w", err)
+	}
+	out := make([]ports.BacklogCount, len(rows))
+	for i, row := range rows {
+		out[i] = ports.BacklogCount{Channel: domain.Channel(row.Channel), Priority: domain.Priority(row.Priority),
+			Status: domain.Status(row.Status), Count: int(row.N)}
+	}
+	return out, nil
 }
 
 // --- Mapping ----------------------------------------------------------------------------------

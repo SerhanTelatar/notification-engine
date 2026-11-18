@@ -12,6 +12,51 @@ import (
 	"github.com/google/uuid"
 )
 
+const backlogCounts = `-- name: BacklogCounts :many
+
+SELECT channel, priority, status, count(*)::int AS n
+FROM notifications
+WHERE status NOT IN ('sent', 'failed', 'cancelled')
+GROUP BY channel, priority, status
+`
+
+type BacklogCountsRow struct {
+	Channel  string
+	Priority int16
+	Status   string
+	N        int32
+}
+
+// ---------------------------------------------------------------------------------------------
+// Backlog gauge (US7, FR-031, research R16)
+// ---------------------------------------------------------------------------------------------
+// Non-terminal rows only, which notifications_backlog_idx covers, so this is an index-only scan
+// over the backlog rather than the whole table.
+func (q *Queries) BacklogCounts(ctx context.Context) ([]BacklogCountsRow, error) {
+	rows, err := q.db.Query(ctx, backlogCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BacklogCountsRow{}
+	for rows.Next() {
+		var i BacklogCountsRow
+		if err := rows.Scan(
+			&i.Channel,
+			&i.Priority,
+			&i.Status,
+			&i.N,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cancelMany = `-- name: CancelMany :many
 UPDATE notifications
 SET status = 'cancelled', cancelled_at = $1::timestamptz, updated_at = $1::timestamptz
