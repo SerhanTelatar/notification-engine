@@ -151,7 +151,7 @@ needs.
   - tests in `internal/domain/notification_test.go`: past schedule → `pending`; hash stable
     under variable-key order; hash differs on any field change
   - depends on T019 and T021
-- [ ] T023 Define every port in `internal/ports/ports.go`: `NotificationRepository`,
+- [X] T023 Define every port in `internal/ports/ports.go`: `NotificationRepository`,
   `BatchRepository`, `TemplateRepository`, `Publisher`, `Provider` (returns a classified
   `domain.Outcome`, HTTP status, message id and Retry-After), `RateLimiter`, `CircuitBreaker`,
   `StatusBroadcaster`, `MetricsRecorder` (delivery outcomes, retries, dead-letters, e2e latency,
