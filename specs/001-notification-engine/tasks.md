@@ -102,7 +102,7 @@ needs.
 - [X] T015 [P] Implement the shutdown helpers in `internal/platform/shutdown/shutdown.go`: a
   signal-aware root ctx (SIGTERM/SIGINT) and an errgroup runner with a bounded `SHUTDOWN_TIMEOUT`
   (R17).
-- [ ] T016 [P] Implement the metrics registry in `internal/platform/metrics/metrics.go`:
+- [X] T016 [P] Implement the metrics registry in `internal/platform/metrics/metrics.go`:
   - `NewRegistry()` plus constructors `NewAPIMetrics(reg)` and `NewWorkerMetrics(reg)`
   - define every collector, name, label and bucket listed in `contracts/observability.md`
   - nothing global; the registry is injected
