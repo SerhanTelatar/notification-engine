@@ -97,8 +97,12 @@ func str(ctx context.Context, k ctxKey) string {
 	return ""
 }
 
-// contextHandler copies ids from the record's context into the record.
-type contextHandler struct{ inner slog.Handler }
+// contextHandler copies ids from the record's context into the record, unless the logger
+// (With) or the record already carries that key: JSON with a repeated key is ambiguous.
+type contextHandler struct {
+	inner  slog.Handler
+	preset map[string]bool // keys added with WithAttrs at the top level
+}
 
 func (h contextHandler) Enabled(ctx context.Context, l slog.Level) bool {
 	return h.inner.Enabled(ctx, l)
@@ -106,6 +110,17 @@ func (h contextHandler) Enabled(ctx context.Context, l slog.Level) bool {
 
 func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	if ctx != nil {
+		present := func(name string) bool {
+			if h.preset[name] {
+				return true
+			}
+			found := false
+			r.Attrs(func(a slog.Attr) bool {
+				found = a.Key == name
+				return !found
+			})
+			return found
+		}
 		for _, f := range []struct {
 			key  ctxKey
 			name string
@@ -114,7 +129,7 @@ func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 			{keyNotificationID, FieldNotificationID},
 			{keyBatchID, FieldBatchID},
 		} {
-			if v := str(ctx, f.key); v != "" {
+			if v := str(ctx, f.key); v != "" && !present(f.name) {
 				r.AddAttrs(slog.String(f.name, v))
 			}
 		}
@@ -123,9 +138,17 @@ func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func (h contextHandler) WithAttrs(as []slog.Attr) slog.Handler {
-	return contextHandler{inner: h.inner.WithAttrs(as)}
+	preset := make(map[string]bool, len(h.preset)+len(as))
+	for k := range h.preset {
+		preset[k] = true
+	}
+	for _, a := range as {
+		preset[a.Key] = true
+	}
+	return contextHandler{inner: h.inner.WithAttrs(as), preset: preset}
 }
 
+// WithGroup nests later attributes, so ids added from ctx (top level) can't collide with them.
 func (h contextHandler) WithGroup(name string) slog.Handler {
-	return contextHandler{inner: h.inner.WithGroup(name)}
+	return contextHandler{inner: h.inner.WithGroup(name), preset: h.preset}
 }

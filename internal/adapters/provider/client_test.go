@@ -122,3 +122,21 @@ func deref(s *string) string {
 	}
 	return *s
 }
+
+// Providers echo requests in error bodies; the recipient and content must not reach last_error
+// or the logs, raw or JSON-escaped.
+func TestSnippetMasksRecipientAndContent(t *testing.T) {
+	content := "line one\n\"quoted\" code 918273"
+	esc, _ := json.Marshal(content)
+	body := []byte(`{"error":"bad","to":"+905559871234","content":` + string(esc) + `,"raw":"+905559871234"}`)
+	got := snippet(body, "+905559871234", content)
+	if strings.Contains(got, "+905559871234") || strings.Contains(got, "918273") {
+		t.Fatalf("snippet leaks: %s", got)
+	}
+	if !strings.Contains(got, `"error":"bad"`) {
+		t.Fatalf("snippet lost the error text: %s", got)
+	}
+	if got := snippet([]byte("this is fine"), "hi"); got != ": this is fine" {
+		t.Fatalf("short values must not be masked: %q", got)
+	}
+}

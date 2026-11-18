@@ -140,3 +140,15 @@ func worst(a, b Status) Status {
 	}
 	return a
 }
+
+// ForAPI is the API's readiness policy (contracts/observability.md): Postgres is required; Redis
+// only carries live status events, so without it the API stays ready but reports degraded.
+func ForAPI(timeout time.Duration, postgres, redis Check) *Checker {
+	return New(timeout).Require("postgres", postgres).Optional("redis", redis)
+}
+
+// ForWorker is the worker's readiness policy: it can't deliver without Postgres, RabbitMQ or
+// Redis (the rate limiter fails closed), so each one is required.
+func ForWorker(timeout time.Duration, postgres, rabbitmq, redis Check) *Checker {
+	return New(timeout).Require("postgres", postgres).Require("rabbitmq", rabbitmq).Require("redis", redis)
+}

@@ -750,7 +750,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - set `rabbitmq_queue_messages{queue}` via passive declare in
     `internal/adapters/rabbitmq/depth.go`
   - (R16)
-- [ ] T096 [US7] Finish readiness and correlation:
+- [X] T096 [US7] Finish readiness and correlation:
   - api readiness: postgres required, redis optional/`degraded`
   - worker readiness: postgres, rabbitmq, redis
   - make sure the correlation id flows from create → `data-model.md

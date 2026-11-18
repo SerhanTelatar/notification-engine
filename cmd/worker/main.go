@@ -9,7 +9,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	amqp "github.com/rabbitmq/amqp091-go"
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/noop"
@@ -111,10 +109,8 @@ func run(ctx context.Context) error {
 	})
 
 	// --- Readiness: every dependency the worker needs to make progress -----------------------
-	checker := health.New(health.DefaultTimeout).
-		Require("postgres", postgres.Ping(pool)).
-		Require("rabbitmq", amqpAlive(conn)).
-		Require("redis", redisadapter.Ping(rdb)) // the limiter fails closed without it
+	// Postgres, RabbitMQ and Redis are all required: the rate limiter fails closed without Redis.
+	checker := health.ForWorker(health.DefaultTimeout, postgres.Ping(pool), rabbitmq.Alive(conn), redisadapter.Ping(rdb))
 
 	// --- Components ---------------------------------------------------------------------------
 	logTickError := func(component string) func(error) {
@@ -140,16 +136,6 @@ func run(ctx context.Context) error {
 	err = shutdown.Run(ctx, log, cfg.ShutdownTimeout, components...)
 	log.InfoContext(context.WithoutCancel(ctx), "worker stopped")
 	return err
-}
-
-// amqpAlive is a readiness check on the broker connection.
-func amqpAlive(conn *amqp.Connection) health.Check {
-	return func(context.Context) error {
-		if conn.IsClosed() {
-			return errors.New("rabbitmq connection closed")
-		}
-		return nil
-	}
 }
 
 // newOpsServer serves liveness, readiness and Prometheus metrics for the worker.

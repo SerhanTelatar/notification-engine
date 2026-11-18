@@ -24,6 +24,10 @@ const maxResponseBytes = 64 << 10
 // errorSnippetBytes caps how much of an error body is kept in last_error.
 const errorSnippetBytes = 200
 
+// minMaskLen: shorter values (a one-word content like "hi") aren't identifying, and masking them
+// would mangle ordinary words in the error text.
+const minMaskLen = 4
+
 // ObserveFunc records provider latency (provider_request_duration_seconds).
 type ObserveFunc func(ch domain.Channel, outcome domain.Outcome, d time.Duration)
 
@@ -123,7 +127,7 @@ func (c *Client) send(ctx context.Context, req ports.ProviderRequest) ports.Prov
 		return res
 	}
 	res.RetryAfter = domain.ParseRetryAfter(resp.Header.Get("Retry-After"), c.now())
-	res.Error = fmt.Sprintf("provider returned HTTP %d%s", status, snippet(body))
+	res.Error = fmt.Sprintf("provider returned HTTP %d%s", status, snippet(body, req.To, req.Content))
 	return res
 }
 
@@ -145,8 +149,21 @@ func redact(err error) string {
 	return err.Error()
 }
 
-func snippet(body []byte) string {
-	s := strings.Join(strings.Fields(string(body)), " ")
+// snippet is a short, single-line excerpt of a provider error body for last_error and the logs.
+// Providers often echo the request, so the recipient and content are masked first: neither may
+// reach a log line (Constitution IV).
+func snippet(body []byte, secrets ...string) string {
+	s := string(body)
+	for _, v := range secrets {
+		if len(v) < minMaskLen {
+			continue
+		}
+		s = strings.ReplaceAll(s, v, "[redacted]")
+		if esc, err := json.Marshal(v); err == nil { // as echoed inside a JSON body
+			s = strings.ReplaceAll(s, string(esc[1:len(esc)-1]), "[redacted]")
+		}
+	}
+	s = strings.Join(strings.Fields(s), " ")
 	if s == "" {
 		return ""
 	}
