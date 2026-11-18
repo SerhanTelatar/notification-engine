@@ -405,7 +405,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - waits for all deferred confirms with a ctx timeout
   - a returned or nacked message is an error
   - reconnects on channel close
-- [ ] T053 [US1] Implement the consumer in `internal/adapters/rabbitmq/consumer.go`:
+- [X] T053 [US1] Implement the consumer in `internal/adapters/rabbitmq/consumer.go`:
   - per channel queue, `Qos(prefetch=CONSUMER_CONCURRENCY_PER_CHANNEL)`, N handler goroutines
   - decode the body; a poison message → `Nack(requeue=false)`
   - put the correlation id from the header into ctx
