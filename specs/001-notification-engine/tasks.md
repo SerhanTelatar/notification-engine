@@ -686,7 +686,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
 
 ### Tests for User Story 7 ⚠️
 
-- [ ] T087 [P] [US7] Extend `internal/app/deliver_test.go` with the breaker-open path: the
+- [X] T087 [P] [US7] Extend `internal/app/deliver_test.go` with the breaker-open path: the
   outcome is a `sending → retrying` deferral with `attempts` unchanged, no attempt row, no limiter
   call, and `next_attempt_at` = now + remaining cool-down (FR-024, R5). A notification older than
   `BREAKER_MAX_DEFER_AGE`, measured from `max(created_at, scheduled_at)`, instead goes
