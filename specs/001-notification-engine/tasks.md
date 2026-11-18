@@ -126,7 +126,7 @@ needs.
     `DueFrom`, `SendableFrom`
   - `IsTerminal`
   - a table-driven test in `internal/domain/status_test.go` covering all 64 (from, to) pairs
-- [ ] T020 [P] Define the domain errors in `internal/domain/errors.go`:
+- [X] T020 [P] Define the domain errors in `internal/domain/errors.go`:
   - `ValidationError{Fields []FieldError}`
   - `ErrNotFound`, `ErrInvalidTransition`, `ErrIdempotencyConflict`, `ErrNotCancellable` (carries
     the current status), `ErrTemplateNameTaken`, `ErrTemplateNotFound`
