@@ -536,7 +536,7 @@ items not early (quickstart #11).
   limiter; add Redis to worker readiness. Add a `demo-burst` script in `scripts/demo-burst.sh`
   (5,000 mixed-priority SMS via the batch endpoint, falling back to single creates) referenced by
   the Makefile. Makes T066 and T067 pass.
-- [ ] T070 [P] [US3] Write `specs/adr/0004-redis-gcra-rate-limiter.md` from R8: why a token
+- [X] T070 [P] [US3] Write `specs/adr/0004-redis-gcra-rate-limiter.md` from R8: why a token
   bucket violates SC-003, the fail-closed choice, and the alternatives.
 
 **Checkpoint**: all P1 stories are done; burst behaviour is demonstrable.
