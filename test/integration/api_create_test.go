@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	httpapi "github.com/SerhanTelatar/notification-engine/internal/adapters/http"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/noop"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/postgres"
@@ -38,7 +40,7 @@ func newAPIWith(t testing.TB, quietLog *slog.Logger, opts ...httpapi.RouterOptio
 }
 
 // apiHandler is the API router wired to the test database, the way cmd/api wires it.
-func apiHandler(quietLog *slog.Logger, opts ...httpapi.RouterOption) http.Handler {
+func apiHandler(quietLog *slog.Logger, opts ...httpapi.RouterOption) chi.Router {
 	repo := postgres.NewNotificationRepo(env.Pool)
 	templates := postgres.NewTemplateRepo(env.Pool)
 	creator := app.NewCreator(app.CreatorDeps{

@@ -884,7 +884,7 @@ including transitions made by the worker.
   - unsubscribe on disconnect
   - a full 64-message buffer → the client is closed with 1008
   - shutdown closes with 1001
-- [ ] T111 [P] [US9] Write the WebSocket integration test in `test/integration/ws_test.go`:
+- [X] T111 [P] [US9] Write the WebSocket integration test in `test/integration/ws_test.go`:
   - unknown id → 404 before the upgrade; both or neither query params → 400
   - a notification subscription gets the snapshot, then `queued`, `sending`, `sent` published by
     the worker process within 1 s (SC-010)
