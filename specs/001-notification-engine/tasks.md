@@ -720,7 +720,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
 
 ### Implementation for User Story 7
 
-- [ ] T092 [US7] Implement the per-channel breaker in `internal/adapters/provider/breaker.go`
+- [X] T092 [US7] Implement the per-channel breaker in `internal/adapters/provider/breaker.go`
   (`ports.CircuitBreaker`) with `sony/gobreaker/v2`:
   - `ReadyToTrip` on `BREAKER_CONSECUTIVE_FAILURES` consecutive transient failures
   - `Timeout=BREAKER_COOLDOWN`, `MaxRequests=1`
