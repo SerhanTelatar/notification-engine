@@ -566,7 +566,7 @@ items not early (quickstart #11).
 
 ### Implementation for User Story 4
 
-- [ ] T073 [US4] Write `sql/queries/batches.sql`: `InsertBatch` (`data-model.md
+- [X] T073 [US4] Write `sql/queries/batches.sql`: `InsertBatch` (`data-model.md
   batches.total_accepted`, `data-model.md batches.total_rejected`, `data-model.md
   batches.correlation_id`), a bulk `InsertNotifications` using `unnest(...) ON CONFLICT
   (idempotency_key) DO NOTHING RETURNING` (R13), `GetBatch`, `CountByStatus`, `ListByBatch`. Run
