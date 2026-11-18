@@ -73,7 +73,7 @@ green.
   (docker build). Required to pass before merge (plan phase A, R18).
 - [X] T010 [P] Write `specs/adr/0001-rabbitmq-over-kafka-and-postgres-queue.md` from R3 (context,
   decision, alternatives, consequences).
-- [ ] T011 [P] Write `specs/adr/0002-transactional-outbox-in-notifications-table.md` from R4,
+- [X] T011 [P] Write `specs/adr/0002-transactional-outbox-in-notifications-table.md` from R4,
   including the publish-inside-tx race fix and relay backpressure.
 - [ ] T012 [P] Write `specs/adr/0003-at-least-once-with-idempotency.md` from R7, including the
   documented residual duplicate window.
