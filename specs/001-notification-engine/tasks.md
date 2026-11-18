@@ -824,7 +824,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
   - the derived variables are sorted and unique
   - render with missing variables lists all of them; extra variables are ignored
   - rendered content still goes through the channel limits
-- [ ] T102 [P] [US8] Write the template integration test in `test/integration/templates_test.go`:
+- [X] T102 [P] [US8] Write the template integration test in `test/integration/templates_test.go`:
   - create 201 / duplicate name 409 / bad syntax 400
   - GET by id and list
   - send by template → the provider receives the rendered content
