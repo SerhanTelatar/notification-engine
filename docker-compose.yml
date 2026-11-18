@@ -103,5 +103,32 @@ services:
     ports:
       - "16686:16686" # Jaeger UI
 
+  # Metrics: Prometheus scrapes every api and worker replica (Docker DNS discovery); the UI is on
+  # :9190 because 9090-9099 belong to the workers.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: [observability]
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9190:9090"
+
+  # Dashboards: http://localhost:3000 (anonymous viewer; admin/admin to edit). The datasource and
+  # the notification-engine dashboard are provisioned from deploy/grafana.
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: [observability]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/notifications.json
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   pgdata:

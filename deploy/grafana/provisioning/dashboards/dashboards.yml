@@ -1,0 +1,10 @@
+# Loads every dashboard JSON in /var/lib/grafana/dashboards (deploy/grafana/dashboards).
+apiVersion: 1
+providers:
+  - name: notification-engine
+    folder: notification-engine
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

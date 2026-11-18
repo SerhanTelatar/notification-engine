@@ -927,7 +927,7 @@ including transitions made by the worker.
   - `traceparent` inject/extract in `internal/adapters/rabbitmq/publisher.go` and
     `internal/adapters/rabbitmq/consumer.go`
   - add Jaeger to the compose `observability` profile
-- [ ] T118 [P] Add Prometheus and Grafana:
+- [X] T118 [P] Add Prometheus and Grafana:
   - `deploy/prometheus/prometheus.yml` scraping api:8080 and worker:9090
   - `deploy/grafana/provisioning/` with a datasource and a dashboard
     (`deploy/grafana/dashboards/notifications.json`): backlog by channel/priority, delivery rate
