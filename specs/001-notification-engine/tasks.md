@@ -470,7 +470,7 @@ batch lookup (US2-AS3) is delivered with US4 in T076.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T061 [P] [US2] Write unit tests for the get use case in `internal/app/query_test.go`:
+- [X] T061 [P] [US2] Write unit tests for the get use case in `internal/app/query_test.go`:
   found, with attempts ordered by `attempt_no`; not found → `ErrNotFound`.
 - [ ] T062 [P] [US2] Write the integration test in `test/integration/api_get_test.go`:
   - 503 then 202 → GET shows 2 attempts, `http_status` and `error` on the first, the provider
