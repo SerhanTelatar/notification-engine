@@ -906,7 +906,7 @@ including transitions made by the worker.
 - [X] T114 [US9] Replace the noop broadcaster with the Redis broadcaster in `cmd/api/main.go` and
   `cmd/worker/main.go`. Start the subscriber → hub loop in the api and mount `/ws`; close clients
   on shutdown. Makes T111 pass.
-- [ ] T115 [P] [US9] Write `specs/adr/0007-realtime-fanout-via-redis-pubsub.md` from R11:
+- [X] T115 [P] [US9] Write `specs/adr/0007-realtime-fanout-via-redis-pubsub.md` from R11:
   best-effort delivery, snapshot on connect, alternatives (LISTEN/NOTIFY, RabbitMQ fanout).
 
 ---
