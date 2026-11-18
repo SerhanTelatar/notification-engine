@@ -215,7 +215,7 @@ needs.
   - `migrations/embed.go` (package `migrations`, `embed.FS`)
   - `cmd/api/migrate.go`, a goose provider implementing `api migrate up|down|status`
   - depends on T025
-- [ ] T027 Implement the Postgres base in `internal/adapters/postgres/db.go`:
+- [X] T027 Implement the Postgres base in `internal/adapters/postgres/db.go`:
   - `pgxpool` constructor with connect/statement timeouts
   - `WithTx(ctx, fn)` helper
   - error translation: unique violation → typed sentinel; `pgx.ErrNoRows` → `domain.ErrNotFound`
