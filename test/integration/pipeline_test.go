@@ -38,6 +38,7 @@ type pipelineConfig struct {
 	backoffMax      time.Duration
 	limiter         ports.RateLimiter // nil = pass-through
 	limiterMaxWait  time.Duration     // 0 = 1 s
+	sendOffset      time.Duration     // pacing after the claim; 0 = none
 }
 
 func defaultPipeline(providerURL string) pipelineConfig {
@@ -120,7 +121,7 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 		Repo: p.repo, Provider: provider.NewClient(cfg.providerURL, cfg.providerTimeout, nil),
 		Breaker: noop.Breaker{}, Limiter: limiterOrNoop(cfg.limiter), Events: noop.Broadcaster{}, Metrics: p.metrics,
 		Clock: noop.Clock{}, Log: quietLog, BackoffBase: cfg.backoffBase, BackoffMax: cfg.backoffMax,
-		LimiterMaxWait: durationOr(cfg.limiterMaxWait, time.Second),
+		LimiterMaxWait: durationOr(cfg.limiterMaxWait, time.Second), SendOffset: cfg.sendOffset,
 	})
 	reaper := app.NewReaper(app.ReaperDeps{Repo: p.repo, Publisher: p.pub, Events: noop.Broadcaster{},
 		Metrics: p.metrics, Clock: noop.Clock{}, Log: quietLog,

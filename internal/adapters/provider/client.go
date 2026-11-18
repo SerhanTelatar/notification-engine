@@ -51,9 +51,21 @@ func NewClient(endpoint string, timeout time.Duration, observe ObserveFunc) *Cli
 		now:     time.Now,
 		http: &http.Client{
 			Timeout:       timeout,
+			Transport:     newTransport(),
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
+}
+
+// newTransport keeps enough idle connections for every concurrent consumer. The default of two
+// per host makes most calls dial a new connection, which wastes time and adds variable latency
+// between a call's rate-limit slot and its arrival at the provider.
+func newTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone() //nolint:forcetypeassert // stdlib default
+	t.MaxIdleConns = 512
+	t.MaxIdleConnsPerHost = 256
+	t.IdleConnTimeout = 90 * time.Second
+	return t
 }
 
 type sendBody struct {

@@ -85,7 +85,7 @@ func run(ctx context.Context) error {
 		})
 	clock, ids := noop.Clock{}, noop.UUIDv7{}
 	// Shared across every worker: at most RATE_LIMIT_PER_SECOND deliveries per channel (FR-016).
-	limiter := redisadapter.NewRateLimiter(rdb, cfg.RateLimitPerSecond)
+	limiter := redisadapter.NewRateLimiter(rdb, cfg.RateLimitPerSecond, cfg.RateLimitHeadroom)
 	// Pass-throughs until their stories: the gobreaker breaker and the Prometheus recorder (US7),
 	// the Redis broadcaster (US9).
 	breaker, events, recorder := noop.Breaker{}, noop.Broadcaster{}, noop.Recorder{}
@@ -95,6 +95,7 @@ func run(ctx context.Context) error {
 		Repo: repo, Provider: providerClient, Breaker: breaker, Limiter: limiter, Events: events,
 		Metrics: recorder, Clock: clock, Log: log.With("component", "deliver"),
 		BackoffBase: cfg.BackoffBase, BackoffMax: cfg.BackoffMax, LimiterMaxWait: cfg.LimiterMaxWait,
+		SendOffset: cfg.RateLimitSendOffset,
 	})
 	relay := app.NewRelay(app.RelayDeps{
 		Repo: repo, Publisher: publisher, Events: events, Metrics: recorder, Clock: clock, IDs: ids,

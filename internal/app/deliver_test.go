@@ -267,3 +267,108 @@ func TestDeliverStoreFailures(t *testing.T) {
 		}
 	})
 }
+
+// slowClaimRepo makes the queued→sending claim take a while, like a loaded database.
+type slowClaimRepo struct {
+	*memRepo
+	delay time.Duration
+}
+
+func (r *slowClaimRepo) StartSending(ctx context.Context, id string, at time.Time) (*domain.Notification, bool, error) {
+	time.Sleep(r.delay)
+	return r.memRepo.StartSending(ctx, id, at)
+}
+
+func TestDeliverPacesTheCallOnTheSlot(t *testing.T) {
+	f := newDeliverFixture()
+	f.uc.d.SendOffset = 60 * time.Millisecond
+	var sentAt time.Time
+	f.provider.trace = nil
+	slotTaken := time.Now()
+	f.uc.d.Provider = providerFunc(func(ctx context.Context, req ports.ProviderRequest) ports.ProviderResult {
+		sentAt = time.Now()
+		return f.provider.Send(ctx, req)
+	})
+	if d := f.uc.Handle(context.Background(), f.queue("n1", nil)); d != ports.DecisionAck {
+		t.Fatalf("decision %s", d)
+	}
+	if early := sentAt.Sub(slotTaken); early < 60*time.Millisecond {
+		t.Fatalf("provider called %v after the slot, want >= the 60ms send offset", early)
+	}
+	if f.limiter.callCount() != 1 {
+		t.Fatalf("a claim within the offset needs one slot, got %d", f.limiter.callCount())
+	}
+}
+
+func TestDeliverReservesAFreshSlotWhenTheClaimOverrunsTheOffset(t *testing.T) {
+	f := newDeliverFixture()
+	f.uc.d.SendOffset = 20 * time.Millisecond
+	f.uc.d.Repo = &slowClaimRepo{memRepo: f.repo, delay: 60 * time.Millisecond}
+	if d := f.uc.Handle(context.Background(), f.queue("n1", nil)); d != ports.DecisionAck {
+		t.Fatalf("decision %s", d)
+	}
+	if f.limiter.callCount() != 2 {
+		t.Fatalf("limiter calls %d: a stale slot must be replaced, never sent on late", f.limiter.callCount())
+	}
+	if f.repo.get("n1").Status != domain.StatusSent {
+		t.Fatal("notification must still be delivered")
+	}
+}
+
+func TestDeliverReleasesTheClaimWhenNoFreshSlotComes(t *testing.T) {
+	f := newDeliverFixture()
+	f.uc.d.SendOffset = 10 * time.Millisecond
+	slow := &slowClaimRepo{memRepo: f.repo, delay: 40 * time.Millisecond}
+	f.uc.d.Repo = slow
+	msg := f.queue("n1", nil)
+	// First slot is granted; while the claim runs, the limiter stops granting.
+	f.uc.d.Limiter = &firstThenBlockLimiter{}
+	if d := f.uc.Handle(context.Background(), msg); d != ports.DecisionAck {
+		t.Fatalf("decision %s", d)
+	}
+	n := f.repo.get("n1")
+	if n.Status != domain.StatusRetrying || n.Attempts != 0 || f.provider.callCount() != 0 {
+		t.Fatalf("row %s attempts %d calls %d: release to retrying without an attempt or a send",
+			n.Status, n.Attempts, f.provider.callCount())
+	}
+	if f.metrics.get("limiter_timeout:sms") != 1 {
+		t.Fatalf("metrics %v", f.metrics.counts)
+	}
+}
+
+type providerFunc func(context.Context, ports.ProviderRequest) ports.ProviderResult
+
+func (f providerFunc) Send(ctx context.Context, r ports.ProviderRequest) ports.ProviderResult {
+	return f(ctx, r)
+}
+
+// firstThenBlockLimiter grants one slot, then blocks until the caller gives up.
+type firstThenBlockLimiter struct{ granted bool }
+
+func (l *firstThenBlockLimiter) Acquire(ctx context.Context, _ domain.Channel) (time.Time, error) {
+	if !l.granted {
+		l.granted = true
+		return time.Now(), nil
+	}
+	<-ctx.Done()
+	return time.Time{}, ctx.Err()
+}
+
+// zeroSlotLimiter returns success without a slot, like the deadline race the Redis limiter had.
+type zeroSlotLimiter struct{}
+
+func (zeroSlotLimiter) Acquire(context.Context, domain.Channel) (time.Time, error) {
+	return time.Time{}, nil
+}
+
+func TestDeliverRefusesAPermitWithoutASlot(t *testing.T) {
+	f := newDeliverFixture()
+	f.uc.d.Limiter = zeroSlotLimiter{}
+	msg := f.queue("n1", nil)
+	if d := f.uc.Handle(context.Background(), msg); d != ports.DecisionRequeue {
+		t.Fatalf("decision %s, want requeue", d)
+	}
+	if f.provider.callCount() != 0 || f.repo.get("n1").Status != domain.StatusQueued {
+		t.Fatal("a permit without a slot must fail closed: no claim, no send")
+	}
+}

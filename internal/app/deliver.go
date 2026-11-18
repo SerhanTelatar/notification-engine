@@ -35,14 +35,19 @@ type DelivererDeps struct {
 	BackoffBase    time.Duration // BACKOFF_BASE
 	BackoffMax     time.Duration // BACKOFF_MAX
 	LimiterMaxWait time.Duration // LIMITER_MAX_WAIT
-	WorkTimeout    time.Duration // 0 = DefaultWorkTimeout
-	Rand           func(n int64) int64
+	// SendOffset (RATE_LIMIT_SEND_OFFSET) delays every provider call to its reserved slot plus this
+	// constant, so variable claim latency can't bunch calls together; it should cover a normal
+	// claim. 0 sends as soon as the claim commits.
+	SendOffset  time.Duration
+	WorkTimeout time.Duration // 0 = DefaultWorkTimeout
+	Rand        func(n int64) int64
 }
 
 // Deliverer is the delivery pipeline for one work message (research R6):
 //
-//	breaker check → rate-limit permit → guarded queued→sending → provider call via the breaker
-//	→ attempt row + sent | retrying | failed in one transaction → ack / requeue / dead-letter.
+//	breaker check → rate-limit slot → guarded queued→sending → wait for slot + send offset
+//	→ provider call via the breaker → attempt row + sent | retrying | failed in one transaction
+//	→ ack / requeue / dead-letter.
 type Deliverer struct{ d DelivererDeps }
 
 // NewDeliverer returns the delivery use case.
@@ -68,7 +73,8 @@ func (dl *Deliverer) Handle(ctx context.Context, msg ports.Message) ports.Decisi
 
 	// 2. Rate-limit permit, before the claim, so the notification stays cancellable while it's
 	//    throttled (research R6). The wait is capped (Constitution III: every retry has a cap).
-	if decision, ok := dl.acquire(ctx, log, msg.Channel); !ok {
+	slot, decision, ok := dl.acquire(ctx, log, msg.Channel)
+	if !ok {
 		return decision
 	}
 
@@ -88,7 +94,12 @@ func (dl *Deliverer) Handle(ctx context.Context, msg ports.Message) ports.Decisi
 	}
 	broadcast(work, log, d.Events, n, statusPtr(domain.StatusQueued), n.UpdatedAt)
 
-	// 4. Provider call through the channel's breaker.
+	// 4. Pace the call on the reserved slot (SC-003 at the provider, not only at the permit).
+	if !dl.pace(work, log, n, slot) {
+		return ports.DecisionAck // released back to retrying, already logged
+	}
+
+	// 5. Provider call through the channel's breaker.
 	started := d.Clock.Now()
 	res, err := d.Breaker.Call(work, n.Channel, func(c context.Context) ports.ProviderResult {
 		return d.Provider.Send(c, ports.ProviderRequest{NotificationID: n.ID, CorrelationID: n.CorrelationID,
@@ -101,32 +112,71 @@ func (dl *Deliverer) Handle(ctx context.Context, msg ports.Message) ports.Decisi
 	finished := d.Clock.Now()
 	d.Metrics.Delivered(n.Channel, res.Outcome, res.Latency)
 
-	// 5. Record the attempt and the outcome atomically.
+	// 6. Record the attempt and the outcome atomically.
 	return dl.record(work, log, n, res, started, finished)
 }
 
-// acquire waits for a permit for at most LimiterMaxWait, retrying limiter errors with backoff and
+// pace holds the provider call until slot + SendOffset. Permits are spaced exactly 1/limit apart,
+// but the claim between permit and call takes a variable time; without pacing, calls bunch and a
+// sliding second at the provider can exceed the limit. If the claim overran the offset, the slot
+// is stale: reserve a fresh one rather than sending early. If no fresh slot comes within the
+// maximum wait, move the claimed row back to retrying without using an attempt (Constitution III:
+// capped, and it ends somewhere legal). ok=false means the row was released.
+func (dl *Deliverer) pace(ctx context.Context, log *slog.Logger, n *domain.Notification, slot time.Time) bool {
+	d := dl.d
+	if d.SendOffset <= 0 {
+		return true
+	}
+	target := slot.Add(d.SendOffset)
+	if time.Now().After(target) {
+		fresh, _, ok := dl.acquire(ctx, log, n.Channel)
+		if !ok {
+			next := d.Clock.Now()
+			if err := d.Repo.DeferSending(ctx, ports.Deferral{NotificationID: n.ID, NextAttemptAt: next, At: next}); err != nil {
+				log.ErrorContext(ctx, "releasing an unpaced claim failed; the reaper will recover it", "error", err)
+			}
+			return false
+		}
+		target = fresh.Add(d.SendOffset)
+	}
+	if wait := time.Until(target); wait > 0 {
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+		}
+	}
+	return true
+}
+
+// acquire waits for a slot for at most LimiterMaxWait, retrying limiter errors with backoff and
 // failing closed. ok=false means: release the message with the returned decision.
-func (dl *Deliverer) acquire(ctx context.Context, log *slog.Logger, ch domain.Channel) (ports.Decision, bool) {
+func (dl *Deliverer) acquire(ctx context.Context, log *slog.Logger, ch domain.Channel) (time.Time, ports.Decision, bool) {
 	d := dl.d
 	start := time.Now()
 	wctx, cancel := context.WithTimeout(ctx, d.LimiterMaxWait)
 	defer cancel()
 	pause := limiterRetryMin
 	for {
-		err := d.Limiter.Acquire(wctx, ch)
+		slot, err := d.Limiter.Acquire(wctx, ch)
+		if err == nil && slot.IsZero() {
+			// Defence in depth: a permit always carries its slot. Treat anything else as no permit,
+			// so a limiter bug fails closed rather than open.
+			err = errors.New("rate limiter returned no slot")
+		}
 		if err == nil {
 			d.Metrics.LimiterWait(ch, time.Since(start))
-			return ports.DecisionAck, true
+			return slot, ports.DecisionAck, true
 		}
 		if ctx.Err() != nil { // shutdown: hand the message back right away
-			return ports.DecisionRequeue, false
+			return time.Time{}, ports.DecisionRequeue, false
 		}
 		if wctx.Err() != nil {
 			d.Metrics.LimiterTimeout(ch)
 			log.WarnContext(ctx, "no rate-limit permit within the maximum wait, message requeued",
 				"max_wait", d.LimiterMaxWait.String(), "error", err)
-			return ports.DecisionRequeue, false
+			return time.Time{}, ports.DecisionRequeue, false
 		}
 		log.WarnContext(ctx, "rate limiter unavailable, retrying (fail closed)", "error", err)
 		select {

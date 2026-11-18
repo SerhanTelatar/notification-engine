@@ -67,11 +67,12 @@ func acquireFor(ctx context.Context, limiters []*redisadapter.RateLimiter, perLi
 			go func() {
 				defer wg.Done()
 				for ctx.Err() == nil {
-					if err := l.Acquire(ctx, ch); err != nil {
+					slot, err := l.Acquire(ctx, ch)
+					if err != nil {
 						return
 					}
 					mu.Lock()
-					times = append(times, time.Now())
+					times = append(times, slot)
 					mu.Unlock()
 				}
 			}()
@@ -85,8 +86,8 @@ func TestRateLimiterIsSharedAcrossInstances(t *testing.T) {
 	flushLimiterKeys(t)
 	// Two "workers", each with its own client, sharing one limit of 20/s.
 	limiters := []*redisadapter.RateLimiter{
-		redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 20),
-		redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 20),
+		redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 20, 0),
+		redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 20, 0),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -104,7 +105,7 @@ func TestRateLimiterIsSharedAcrossInstances(t *testing.T) {
 
 func TestRateLimiterChannelsAreIndependent(t *testing.T) {
 	flushLimiterKeys(t)
-	l := redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 10)
+	l := redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 10, 0)
 	// Book a second of sms slots.
 	var wg sync.WaitGroup
 	for range 10 {
@@ -113,14 +114,14 @@ func TestRateLimiterChannelsAreIndependent(t *testing.T) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			_ = l.Acquire(ctx, domain.ChannelSMS)
+			_, _ = l.Acquire(ctx, domain.ChannelSMS)
 		}()
 	}
 	time.Sleep(50 * time.Millisecond)
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := l.Acquire(ctx, domain.ChannelEmail); err != nil {
+	if _, err := l.Acquire(ctx, domain.ChannelEmail); err != nil {
 		t.Fatal(err)
 	}
 	if waited := time.Since(start); waited > 50*time.Millisecond {
@@ -131,16 +132,16 @@ func TestRateLimiterChannelsAreIndependent(t *testing.T) {
 
 func TestRateLimiterRespectsTheCallerDeadline(t *testing.T) {
 	flushLimiterKeys(t)
-	l := redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 1) // one slot per second
+	l := redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 1, 0) // one slot per second
 	ctx := context.Background()
-	if err := l.Acquire(ctx, domain.ChannelPush); err != nil {
+	if _, err := l.Acquire(ctx, domain.ChannelPush); err != nil {
 		t.Fatal(err)
 	}
 	// The next slot is ~1 s away: a 200 ms deadline must not reserve it, and must return in time.
 	short, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if err := l.Acquire(short, domain.ChannelPush); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := l.Acquire(short, domain.ChannelPush); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want DeadlineExceeded", err)
 	}
 	if time.Since(start) > 400*time.Millisecond {
@@ -149,17 +150,17 @@ func TestRateLimiterRespectsTheCallerDeadline(t *testing.T) {
 	// The unreserved slot is still free for a patient caller.
 	patient, cancel2 := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel2()
-	if err := l.Acquire(patient, domain.ChannelPush); err != nil {
+	if _, err := l.Acquire(patient, domain.ChannelPush); err != nil {
 		t.Fatalf("slot was wasted by the abandoned caller: %v", err)
 	}
 }
 
 func TestRateLimiterFailsClosed(t *testing.T) {
 	// Nothing listens on this port: an unreachable Redis must deny, not allow.
-	l := redisadapter.NewRateLimiter(newRedisClient(t, "127.0.0.1:1"), 100)
+	l := redisadapter.NewRateLimiter(newRedisClient(t, "127.0.0.1:1"), 100, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := l.Acquire(ctx, domain.ChannelSMS); err == nil {
+	if _, err := l.Acquire(ctx, domain.ChannelSMS); err == nil {
 		t.Fatal("Acquire succeeded without Redis: the limiter must fail closed")
 	}
 }
@@ -236,7 +237,7 @@ func TestRateLimiterOutageRequeuesThenRecovers(t *testing.T) {
 	resetBroker(t)
 	mock := testenv.NewMockProvider(t)
 	proxy := newToggleProxy(t, env.RedisAddr)
-	limiter := redisadapter.NewRateLimiter(newRedisClient(t, proxy.addr), 100)
+	limiter := redisadapter.NewRateLimiter(newRedisClient(t, proxy.addr), 100, 0)
 
 	cfg := defaultPipeline(mock.SendURL())
 	cfg.limiter, cfg.limiterMaxWait = limiter, 2*time.Second
@@ -267,8 +268,9 @@ func TestRateLimitEndToEndTwoWorkers(t *testing.T) {
 	mock := testenv.NewMockProvider(t)
 	for range 2 { // two worker processes, each with its own Redis client
 		cfg := defaultPipeline(mock.SendURL())
-		cfg.limiter = redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), limit)
+		cfg.limiter = redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), limit, 0)
 		cfg.limiterMaxWait = 10 * time.Second
+		cfg.sendOffset = 50 * time.Millisecond
 		startPipeline(t, cfg)
 	}
 	insertBurst(t, domain.ChannelSMS, "+905551234567", burst)
@@ -281,17 +283,36 @@ func TestRateLimitEndToEndTwoWorkers(t *testing.T) {
 	for _, r := range mock.Received() {
 		arrivals = append(arrivals, r.At)
 	}
-	// At the provider, network and DB latency add a little jitter on top of exactly spaced permits.
+	// Calls are paced on slot + offset, so the claim's latency can't bunch them; only timer and
+	// loopback jitter remain, which timerTolerance covers.
 	peak := maxInWindow(arrivals, time.Second-timerTolerance)
 	rate := float64(burst) / elapsed.Seconds()
 	t.Logf("%d sms via 2 workers in %v (%.1f/s); peak %d at the provider in any 1 s window", burst, elapsed.Round(time.Millisecond), rate, peak)
-	if peak > limit+1 {
-		t.Fatalf("provider saw %d in a 1 s window, limit %d (+1 for transit jitter)", peak, limit)
+	if peak > limit {
+		t.Fatalf("provider saw %d in a 1 s window, limit %d (SC-003 at the provider)", peak, limit)
 	}
 	if len(arrivals) != burst {
 		t.Fatalf("provider calls %d, want %d", len(arrivals), burst)
 	}
 	if minDuration := time.Duration(float64(burst-limit) / limit * float64(time.Second)); elapsed < minDuration {
 		t.Fatalf("drained in %v, faster than the limit allows (>= %v)", elapsed, minDuration)
+	}
+}
+
+func TestRateLimiterHeadroomWidensSlotSpacing(t *testing.T) {
+	flushLimiterKeys(t)
+	// 20/s with 10% headroom: slots 55 ms apart instead of 50 ms.
+	l := redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), 20, 0.10)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	slots := acquireFor(ctx, []*redisadapter.RateLimiter{l}, 4, domain.ChannelSMS)
+	sort.Slice(slots, func(i, j int) bool { return slots[i].Before(slots[j]) })
+	for i := 1; i < len(slots); i++ {
+		if gap := slots[i].Sub(slots[i-1]); gap < 55*time.Millisecond-2*time.Millisecond {
+			t.Fatalf("slots %d and %d are %v apart, want >= 55ms", i-1, i, gap)
+		}
+	}
+	if len(slots) < 34 || len(slots) > 38 {
+		t.Fatalf("%d slots in 2 s, want about 36 (20/s / 1.1)", len(slots))
 	}
 }

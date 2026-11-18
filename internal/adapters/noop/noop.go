@@ -27,8 +27,8 @@ var (
 type Limiter struct{}
 
 // Acquire returns at once unless ctx is already done.
-func (Limiter) Acquire(ctx context.Context, _ domain.Channel) error {
-	return ctx.Err() //nolint:wrapcheck // ctx error is self-describing
+func (Limiter) Acquire(ctx context.Context, _ domain.Channel) (time.Time, error) {
+	return time.Now(), ctx.Err() //nolint:wrapcheck // ctx error is self-describing
 }
 
 // Breaker is permanently closed.

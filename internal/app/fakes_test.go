@@ -419,7 +419,7 @@ type fakeLimiter struct {
 	trace *trace
 }
 
-func (l *fakeLimiter) Acquire(ctx context.Context, _ domain.Channel) error {
+func (l *fakeLimiter) Acquire(ctx context.Context, _ domain.Channel) (time.Time, error) {
 	l.trace.add("acquire")
 	l.mu.Lock()
 	l.calls++
@@ -427,9 +427,9 @@ func (l *fakeLimiter) Acquire(ctx context.Context, _ domain.Channel) error {
 	l.mu.Unlock()
 	if block {
 		<-ctx.Done()
-		return ctx.Err()
+		return time.Time{}, ctx.Err()
 	}
-	return err
+	return time.Now(), err // the slot is "now": real time, because pacing uses real sleeps
 }
 
 func (l *fakeLimiter) callCount() int {

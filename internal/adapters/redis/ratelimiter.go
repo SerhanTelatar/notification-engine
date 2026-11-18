@@ -31,11 +31,14 @@ type RateLimiter struct {
 
 var _ ports.RateLimiter = (*RateLimiter)(nil)
 
-// NewRateLimiter allows perSecond deliveries per channel.
-func NewRateLimiter(client goredis.UniversalClient, perSecond int) *RateLimiter {
+// NewRateLimiter allows at most perSecond deliveries per channel. headroom (e.g. 0.05) spaces
+// slots that much wider than 1s/perSecond, so millisecond scheduling and network jitter between
+// a slot and the provider can't push a sliding second over the limit (SC-003). 0 = exact spacing.
+func NewRateLimiter(client goredis.UniversalClient, perSecond int, headroom float64) *RateLimiter {
+	interval := float64(time.Second) / float64(max(1, perSecond)) * (1 + max(0, headroom))
 	return &RateLimiter{
 		client:   client,
-		interval: time.Second / time.Duration(max(1, perSecond)),
+		interval: time.Duration(interval),
 		script:   goredis.NewScript(gcraSource),
 	}
 }
@@ -43,43 +46,56 @@ func NewRateLimiter(client goredis.UniversalClient, perSecond int) *RateLimiter 
 // Key is the Redis key for a channel's schedule.
 func Key(ch domain.Channel) string { return "ratelimit:" + string(ch) }
 
-// Acquire reserves the next free slot for ch and sleeps until it, so the caller proceeds exactly on
-// its slot. The reservation never reaches past ctx's deadline: when the next slot is further away,
+// Acquire reserves the next free slot for ch, sleeps until it and returns the slot's local time,
+// so the caller can pace its provider call on it. The reservation never reaches past ctx's deadline: when the next slot is further away,
 // Acquire waits for the deadline and returns ctx's error without reserving anything. A Redis
 // failure is returned at once; the caller retries or gives up, and never proceeds without a permit
 // (fail closed).
-func (l *RateLimiter) Acquire(ctx context.Context, ch domain.Channel) error {
+func (l *RateLimiter) Acquire(ctx context.Context, ch domain.Channel) (time.Time, error) {
 	maxWait := defaultMaxWait
 	if dl, ok := ctx.Deadline(); ok {
 		maxWait = time.Until(dl)
 	}
 	if maxWait <= 0 {
-		return ctx.Err() //nolint:wrapcheck // the caller's own context error
+		// The deadline has passed, but ctx.Err() can still be nil for a moment, until the
+		// context's own timer fires. Never return (zero, nil): that would read as a granted permit
+		// and fail open.
+		return time.Time{}, deadlineErr(ctx)
 	}
 	res, err := l.script.Run(ctx, l.client, []string{Key(ch)}, l.interval.Microseconds(), maxWait.Microseconds()).Int64()
+	replied := time.Now()
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr //nolint:wrapcheck // the caller's own context error
+			return time.Time{}, ctxErr //nolint:wrapcheck // the caller's own context error
 		}
-		return fmt.Errorf("rate limiter for %s: %w", ch, err)
+		return time.Time{}, fmt.Errorf("rate limiter for %s: %w", ch, err)
 	}
 	if res < 0 {
 		// No slot within the caller's patience: don't reserve one it would abandon.
 		<-ctx.Done()
-		return ctx.Err() //nolint:wrapcheck // the caller's own context error
+		return time.Time{}, ctx.Err() //nolint:wrapcheck // the caller's own context error
 	}
+	slot := replied.Add(time.Duration(res) * time.Microsecond)
 	if res == 0 {
-		return nil
+		return slot, nil
 	}
-	timer := time.NewTimer(time.Duration(res) * time.Microsecond)
+	timer := time.NewTimer(time.Until(slot))
 	defer timer.Stop()
 	select {
 	case <-timer.C:
-		return nil
+		return slot, nil
 	case <-ctx.Done():
 		// The reserved slot goes unused: a little lost throughput, never an extra send.
-		return ctx.Err() //nolint:wrapcheck // the caller's own context error
+		return time.Time{}, ctx.Err() //nolint:wrapcheck // the caller's own context error
 	}
+}
+
+// deadlineErr is ctx's error once its deadline has passed, never nil.
+func deadlineErr(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err //nolint:wrapcheck // the caller's own context error
+	}
+	return context.DeadlineExceeded
 }
 
 // Ping is a readiness check.

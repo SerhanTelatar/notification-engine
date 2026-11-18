@@ -255,9 +255,11 @@ type CircuitBreaker interface {
 }
 
 // RateLimiter grants delivery permits per channel across all workers (FR-016). Acquire blocks
-// until a permit is granted or ctx ends; callers bound it with LIMITER_MAX_WAIT.
+// until the reserved slot arrives (or ctx ends) and returns that slot's local time; callers bound
+// it with LIMITER_MAX_WAIT. Slots are spaced exactly 1/limit apart, so a caller that starts its
+// provider call at slot + a constant offset keeps the calls themselves within the limit.
 type RateLimiter interface {
-	Acquire(ctx context.Context, ch domain.Channel) error
+	Acquire(ctx context.Context, ch domain.Channel) (slot time.Time, err error)
 }
 
 // ---------------------------------------------------------------------------------------------
