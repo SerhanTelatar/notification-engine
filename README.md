@@ -39,6 +39,10 @@ docker compose up --build     # postgres, rabbitmq, redis, migrate, api, worker,
 | http://localhost:8080/swagger | API docs (Swagger UI over [`api/openapi.yaml`](api/openapi.yaml)) |
 | http://localhost:8080/readyz · http://localhost:9090/readyz | API / worker readiness |
 | http://localhost:8080/metrics · http://localhost:9090/metrics | Prometheus metrics |
+
+Workers publish their ops port from the range 9090–9099, so `docker compose up --scale worker=2`
+works. A single worker usually gets 9090; `docker compose port --index N worker 9090` shows where
+each replica landed.
 | http://localhost:15672 (guest/guest) | RabbitMQ management UI |
 | http://localhost:8090/received | Calls received by the mock provider ([contract](specs/001-notification-engine/contracts/provider.md)) |
 
@@ -173,6 +177,10 @@ would race. `make migrate` runs the same command against the stack.
     after its slot, to cover the claim.
   - `0` gives exact spacing. It held at 20/s in the integration tests, but not on a loaded host
     at 100/s. ([ADR 0004](specs/adr/0004-redis-gcra-rate-limiter.md))
+- **A broker outage pauses delivery, not the worker.** A supervisor redials RabbitMQ with backoff
+  and restarts the relay, reaper and consumers on the new connection. Meanwhile the worker answers
+  `/healthz` 200 and `/readyz` 503, the API keeps accepting notifications into Postgres, and
+  nothing is lost.
 - **The rate limiter fails closed.**
   - If Redis is down, nothing is sent: the message is requeued after `LIMITER_MAX_WAIT` and its
     row stays `queued`. Exceeding the provider's limit is worse than waiting.

@@ -788,7 +788,7 @@ any bonus work.
   - 10,000 `POST /api/v1/notifications` with valid, unique SMS payloads
   - report p50/p95/p99, and record the p95 with pass/fail against SC-001 (< 200 ms) in
     `specs/001-notification-engine/checklists/validation.md`
-- [ ] T100 Run the required-scope validation (quickstart.md scenarios #1–#15) against
+- [X] T100 Run the required-scope validation (quickstart.md scenarios #1–#15) against
   `docker compose up`. Record the results in `specs/001-notification-engine/checklists/validation.md`
   and fix any gaps by appending tasks.
 - [X] T120 Fix the gap found by T100 (quickstart #11): the worker published the fixed host port

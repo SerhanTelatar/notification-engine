@@ -76,8 +76,9 @@ services:
     <<: *app
     command: ["/app/worker"]
     ports:
-      # /healthz, /readyz, /metrics. A host port range so `--scale worker=N` works: the first
-      # replica gets 9090, the next ones 9091, 9092, …
+      # /healthz, /readyz, /metrics. A host port range so `--scale worker=N` works: each replica
+      # gets a free port in 9090-9099 (a single worker usually gets 9090). Find them with
+      # `docker compose port --index N worker 9090`.
       - "9090-9099:9090"
     depends_on:
       postgres:
