@@ -123,7 +123,7 @@ scope).
 |------------|-----------|----------------|----------|
 | Breaker open → status `retrying` straight from `queued` | `queued → sending → retrying` in one tx, no attempt consumed, no rate-limit permit used | FR-012 forbids `queued → retrying`; FR-024 | R5, R6 |
 | Reaper resets stale `queued`/`sending` to `retrying` | stale `sending` → `retrying`/`failed`; stale `queued` is republished without a status change | FR-012 | R5 |
-| Consumer loads the row, then skips it if not `queued` | the consumer's *first* DB step is the guarded update; the relay publishes inside its tx | Without this, a message can be lost if the consumer reads before the relay commits (FR-025) | R4 |
+| Consumer loads the row, then skips it if not `queued` | the consumer claims with a locking read (`SELECT … FOR UPDATE`) and then the guarded update, in one tx; the relay publishes inside its tx | Without this, a message can be lost if the consumer reads before the relay commits (FR-025) | R4 |
 | Token bucket 100/s | GCRA with zero burst | SC-003 says "any one-second window"; a 100-capacity bucket allows ~200 | R8 |
 | Only 202 counts as success | any 2xx counts as success | FR-019 says "accepted response"; webhook.site returns 200 | R9 |
 | Rate-limit permit taken after `sending` | permit taken before `sending` | keeps items cancellable while throttled (FR-013/014) | R6 |

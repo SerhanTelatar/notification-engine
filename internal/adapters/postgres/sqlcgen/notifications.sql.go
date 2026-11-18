@@ -218,6 +218,25 @@ func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotification
 	return i, err
 }
 
+const lockForClaim = `-- name: LockForClaim :one
+
+SELECT status FROM notifications WHERE id = $1 FOR UPDATE
+`
+
+// ---------------------------------------------------------------------------------------------
+// Delivery (research R6)
+// ---------------------------------------------------------------------------------------------
+// First step of the claim. A locking read with no status predicate waits for a relay transaction
+// that still holds the row, then returns the newest committed version. A plain guarded UPDATE
+// would not: under READ COMMITTED it picks candidates from its snapshot, where the row is still
+// pending, so it would match 0 rows without waiting and the message would be dropped.
+func (q *Queries) LockForClaim(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, lockForClaim, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const markFailed = `-- name: MarkFailed :one
 UPDATE notifications
 SET status = 'failed', attempts = attempts + 1, last_error = $1,
@@ -514,7 +533,6 @@ func (q *Queries) RelayTryLock(ctx context.Context, channel string) (bool, error
 }
 
 const startSending = `-- name: StartSending :one
-
 UPDATE notifications SET status = 'sending', updated_at = $1
 WHERE id = $2 AND status = 'queued'
 RETURNING id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at
@@ -525,11 +543,8 @@ type StartSendingParams struct {
 	ID  uuid.UUID
 }
 
-// ---------------------------------------------------------------------------------------------
-// Delivery (research R6)
-// ---------------------------------------------------------------------------------------------
-// The atomic cancel check (FR-014): only a queued row can be claimed. 0 rows means drop the
-// message (cancelled, duplicate or already done).
+// Second step, same transaction: the atomic cancel check (FR-014). Only a queued row can be
+// claimed; 0 rows means drop the message (cancelled, duplicate or already done).
 func (q *Queries) StartSending(ctx context.Context, arg StartSendingParams) (Notification, error) {
 	row := q.db.QueryRow(ctx, startSending, arg.Now, arg.ID)
 	var i Notification

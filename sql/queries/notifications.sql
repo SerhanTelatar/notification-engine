@@ -50,9 +50,16 @@ RETURNING id;
 -- Delivery (research R6)
 -- ---------------------------------------------------------------------------------------------
 
+-- name: LockForClaim :one
+-- First step of the claim. A locking read with no status predicate waits for a relay transaction
+-- that still holds the row, then returns the newest committed version. A plain guarded UPDATE
+-- would not: under READ COMMITTED it picks candidates from its snapshot, where the row is still
+-- pending, so it would match 0 rows without waiting and the message would be dropped.
+SELECT status FROM notifications WHERE id = @id FOR UPDATE;
+
 -- name: StartSending :one
--- The atomic cancel check (FR-014): only a queued row can be claimed. 0 rows means drop the
--- message (cancelled, duplicate or already done).
+-- Second step, same transaction: the atomic cancel check (FR-014). Only a queued row can be
+-- claimed; 0 rows means drop the message (cancelled, duplicate or already done).
 UPDATE notifications SET status = 'sending', updated_at = @now
 WHERE id = @id AND status = 'queued'
 RETURNING *;

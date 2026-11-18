@@ -123,21 +123,37 @@ func (r *NotificationRepo) RelayTx(ctx context.Context, ch domain.Channel, at ti
 }
 
 // StartSending is the guarded queued → sending claim (FR-014). ok=false means the row isn't
-// queued any more: cancelled, duplicate message or already processed.
+// queued: cancelled, duplicate message or already processed. It locks the row first, so a message
+// that overtakes its relay transaction waits for the commit instead of being dropped.
 func (r *NotificationRepo) StartSending(ctx context.Context, id string, at time.Time) (*domain.Notification, bool, error) {
 	uid, err := parseID(id)
 	if err != nil {
 		return nil, false, err
 	}
-	row, err := r.q.StartSending(ctx, sqlcgen.StartSendingParams{ID: uid, Now: at})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, false, nil
-	}
+	var claimed *domain.Notification
+	err = WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		// Wait for any relay transaction holding the row, then see its committed status.
+		if _, err := q.LockForClaim(ctx, uid); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil // unknown id: nothing to claim
+			}
+			return translate(err, "lock for claim")
+		}
+		row, err := q.StartSending(ctx, sqlcgen.StartSendingParams{ID: uid, Now: at})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // not queued: cancelled, duplicate or already processed
+		}
+		if err != nil {
+			return translate(err, "start sending")
+		}
+		claimed, err = toDomain(row)
+		return err
+	})
 	if err != nil {
-		return nil, false, translate(err, "start sending")
+		return nil, false, err
 	}
-	n, err := toDomain(row)
-	return n, err == nil, err
+	return claimed, claimed != nil, nil
 }
 
 // ApplyOutcome records the attempt and applies the transition in one transaction.

@@ -383,3 +383,62 @@ func TestRepoCrashRecovery(t *testing.T) {
 		t.Fatalf("republished row must stay queued with a fresh updated_at: %s age=%v", st, age)
 	}
 }
+
+// TestRepoClaimWaitsForAnOpenRelayTransaction is the regression test for the overtaking race:
+// RelayTx publishes before it commits, so a fast consumer can try to claim a row whose `queued`
+// status isn't committed yet. The claim must wait for the commit, not drop the message.
+func TestRepoClaimWaitsForAnOpenRelayTransaction(t *testing.T) {
+	env.Truncate(t)
+	repo := postgres.NewNotificationRepo(env.Pool)
+	n := mustCreate(t, repo, newNotification(t, domain.ChannelSMS, nil))
+
+	type claim struct {
+		ok  bool
+		err error
+		at  time.Time
+	}
+	claimed := make(chan claim, 1)
+	var committedAt time.Time
+	_, err := repo.RelayTx(context.Background(), domain.ChannelSMS, time.Now(), func(int) int { return 10 },
+		func(context.Context, []domain.Notification) error {
+			// The "message" overtakes the commit: claim from another connection now.
+			go func() {
+				_, ok, err := repo.StartSending(context.Background(), n.ID, time.Now())
+				claimed <- claim{ok, err, time.Now()}
+			}()
+			time.Sleep(300 * time.Millisecond) // the relay transaction stays open
+			committedAt = time.Now()
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := <-claimed
+	if c.err != nil || !c.ok {
+		t.Fatalf("claim during an open relay transaction: ok=%v err=%v; it must wait and succeed", c.ok, c.err)
+	}
+	if c.at.Before(committedAt) {
+		t.Fatal("the claim returned before the relay transaction committed")
+	}
+	if st, _ := statusOf(t, n.ID); st != "sending" {
+		t.Fatalf("status %s, want sending", st)
+	}
+
+	// A rolled-back relay leaves the row due: the claim must then find nothing to claim.
+	m := mustCreate(t, repo, newNotification(t, domain.ChannelSMS, nil))
+	_, _ = repo.RelayTx(context.Background(), domain.ChannelSMS, time.Now(), func(int) int { return 10 },
+		func(context.Context, []domain.Notification) error {
+			go func() {
+				_, ok, err := repo.StartSending(context.Background(), m.ID, time.Now())
+				claimed <- claim{ok, err, time.Now()}
+			}()
+			time.Sleep(200 * time.Millisecond)
+			return errors.New("broker nack")
+		})
+	if c := <-claimed; c.err != nil || c.ok {
+		t.Fatalf("claim after a rolled-back relay: ok=%v err=%v, want not claimed", c.ok, c.err)
+	}
+	if st, _ := statusOf(t, m.ID); st != "pending" {
+		t.Fatalf("status %s, want pending (due for the next relay pass)", st)
+	}
+}

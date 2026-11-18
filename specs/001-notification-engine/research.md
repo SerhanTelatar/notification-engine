@@ -73,10 +73,17 @@ implementation (Constitution I).
   - `SKIP LOCKED` makes several worker replicas safe.
   - Publishing *inside* the transaction closes a race the input flow had: a consumer could receive
     a message while the row was still `pending`, skip it, and the row would then be committed as
-    `queued` with no message left. The consumer's guarded `UPDATE … WHERE status='queued'` waits
-    on the relay's row lock and re-checks the condition after commit (Postgres EvalPlanQual), so
-    it either sees `queued` or, after a rollback, sees `pending` and drops the message; the relay
-    then publishes it again.
+    `queued` with no message left. The consumer claims in two steps in one transaction: first
+    `SELECT … WHERE id=$1 FOR UPDATE` (no status predicate), then the guarded
+    `UPDATE … WHERE status='queued'`. The locking read waits for the relay's row lock and returns
+    the newest committed version, so the consumer sees either `queued` or, after a rollback,
+    `pending` (drop; the relay publishes it again).
+  - **Correction (found by the T043 integration tests)**: an earlier version of this entry said the
+    guarded UPDATE alone would wait and re-check (EvalPlanQual). It doesn't. Under READ COMMITTED
+    an UPDATE picks its candidate rows from its snapshot, where the row is still `pending`, so it
+    matched 0 rows without waiting, and the message was dropped whenever it overtook the commit.
+    The locking read is what makes the wait happen; `TestRepoClaimWaitsForAnOpenRelayTransaction`
+    guards it.
   - A crash between publish and commit leaves the row due again, so it gets republished. The
     duplicate message is harmless because of the consumer guard (R7).
 - **Cost**: row locks are held for one publish+confirm round-trip per tick (a few milliseconds for
