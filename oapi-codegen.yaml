@@ -1,0 +1,13 @@
+# oapi-codegen configuration: chi + strict server + models from api/openapi.yaml.
+# The `realtime` (/ws) and `ops-raw` (/metrics, /swagger) tags are mounted by hand
+# (plan.md Complexity Tracking, research R15).
+package: gen
+output: internal/adapters/http/gen/api.gen.go
+generate:
+  chi-server: true
+  strict-server: true
+  models: true
+output-options:
+  exclude-tags:
+    - realtime
+    - ops-raw

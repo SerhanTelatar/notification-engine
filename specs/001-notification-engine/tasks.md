@@ -54,7 +54,7 @@ green.
 - [X] T005 [P] Create a multi-stage `Dockerfile` that builds `api`, `worker` and `mockprovider`
   into one distroless image; the binary is chosen by the container command (plan, Project
   Structure).
-- [ ] T006 Promote the API contract:
+- [X] T006 Promote the API contract:
   - move `specs/001-notification-engine/contracts/openapi.yaml` to `api/openapi.yaml`
   - replace the old file with a one-line pointer
   - create `oapi-codegen.yaml` (chi server, strict server, models; exclude tags `realtime` and
