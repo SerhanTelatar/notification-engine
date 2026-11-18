@@ -855,7 +855,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
   `ListTemplates`), run `make gen`, and implement
   `internal/adapters/postgres/template_repo.go` (unique violation →
   `domain.ErrTemplateNameTaken`).
-- [ ] T107 [US8] Implement `internal/app/templates.go` (`CreateTemplate`, `GetTemplate`,
+- [X] T107 [US8] Implement `internal/app/templates.go` (`CreateTemplate`, `GetTemplate`,
   `ListTemplates`) and add template rendering to `internal/app/create.go` and
   `internal/app/batch.go`:
   - resolve the template, render, store the rendered content and `data-model.md
