@@ -59,7 +59,7 @@ func (r *Relay) relayChannel(ctx context.Context, log *slog.Logger, ch domain.Ch
 		msgs := make([]ports.Message, len(rows))
 		for i, n := range rows {
 			msgs[i] = ports.Message{NotificationID: n.ID, Channel: n.Channel, Priority: n.Priority,
-				CorrelationID: n.CorrelationID, EnqueuedAt: now}
+				CorrelationID: n.CorrelationID, TraceParent: n.TraceParent, EnqueuedAt: now}
 		}
 		if err := r.d.Publisher.Publish(ctx, msgs); err != nil {
 			for _, n := range rows {

@@ -8,7 +8,9 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/SerhanTelatar/notification-engine/internal/platform/tracing"
 	"github.com/SerhanTelatar/notification-engine/internal/ports"
 )
 
@@ -29,6 +31,7 @@ var ErrNotConfirmed = errors.New("message not confirmed by broker")
 type Publisher struct {
 	conn    *amqp.Connection
 	timeout time.Duration
+	opts    options
 
 	mu      sync.Mutex // one batch at a time per channel; confirms are per channel
 	ch      *amqp.Channel
@@ -38,15 +41,15 @@ type Publisher struct {
 var _ ports.Publisher = (*Publisher)(nil)
 
 // NewPublisher returns a publisher on conn; timeout <= 0 means DefaultPublishTimeout.
-func NewPublisher(conn *amqp.Connection, timeout time.Duration) *Publisher {
+func NewPublisher(conn *amqp.Connection, timeout time.Duration, opts ...Option) *Publisher {
 	if timeout <= 0 {
 		timeout = DefaultPublishTimeout
 	}
-	return &Publisher{conn: conn, timeout: timeout}
+	return &Publisher{conn: conn, timeout: timeout, opts: applyOptions(opts)}
 }
 
 // Publish sends msgs persistently with their priority and waits for every confirm.
-func (p *Publisher) Publish(ctx context.Context, msgs []ports.Message) error {
+func (p *Publisher) Publish(ctx context.Context, msgs []ports.Message) (err error) {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -64,10 +67,20 @@ func (p *Publisher) Publish(ctx context.Context, msgs []ports.Message) error {
 		return err
 	}
 	confirms := make([]*amqp.DeferredConfirmation, 0, len(msgs))
+	var spans []trace.Span
+	defer func() { endSpans(spans, err) }() // each span covers its message's publish and confirm
 	for _, m := range msgs {
 		body, err := encode(m)
 		if err != nil {
 			return err
+		}
+		headers := amqp.Table{HeaderCorrelationID: m.CorrelationID}
+		span, traceParent := p.opts.publishSpan(ctx, m)
+		if span != nil {
+			spans = append(spans, span)
+		}
+		if traceParent != "" {
+			headers[tracing.HeaderTraceParent] = traceParent
 		}
 		dc, err := ch.PublishWithDeferredConfirmWithContext(ctx, Exchange, string(m.Channel),
 			true,  // mandatory: an unroutable message comes back as basic.return
@@ -78,7 +91,7 @@ func (p *Publisher) Publish(ctx context.Context, msgs []ports.Message) error {
 				ContentType:  "application/json",
 				MessageId:    m.NotificationID,
 				Timestamp:    m.EnqueuedAt,
-				Headers:      amqp.Table{HeaderCorrelationID: m.CorrelationID},
+				Headers:      headers,
 				Body:         body,
 			})
 		if err != nil {

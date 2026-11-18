@@ -8,11 +8,11 @@
 INSERT INTO notifications (
     id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status,
     attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars,
-    correlation_id, created_at, updated_at
+    correlation_id, traceparent, created_at, updated_at
 ) VALUES (
     @id, @batch_id, @idempotency_key, @payload_hash, @channel, @recipient, @content, @priority, @status,
     0, @max_attempts, @next_attempt_at, @scheduled_at, @template_id, @template_vars,
-    @correlation_id, @created_at, @created_at
+    @correlation_id, sqlc.narg(traceparent), @created_at, @created_at
 )
 ON CONFLICT (idempotency_key) DO NOTHING
 RETURNING *;

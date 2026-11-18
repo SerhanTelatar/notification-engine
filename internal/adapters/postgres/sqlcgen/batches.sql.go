@@ -80,13 +80,13 @@ const insertNotificationsBulk = `-- name: InsertNotificationsBulk :many
 INSERT INTO notifications (
     id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status,
     attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars,
-    correlation_id, created_at, updated_at
+    correlation_id, traceparent, created_at, updated_at
 )
 SELECT u.id, $1::uuid, NULLIF(u.idempotency_key, ''), u.payload_hash, u.channel, u.recipient,
        u.content, u.priority, u.status, 0, u.max_attempts, u.next_attempt_at,
        NULLIF(u.scheduled_at, '0001-01-01 00:00:00+00'::timestamptz),
        NULLIF(u.template_id, '')::uuid, NULLIF(u.template_vars, '')::jsonb,
-       $2::text, $3::timestamptz, $3::timestamptz
+       $2::text, NULLIF(u.traceparent, ''), $3::timestamptz, $3::timestamptz
 FROM (
     -- Single-argument unnest calls in one SELECT list advance in lockstep (one row per item).
     SELECT unnest($4::uuid[])                    AS id,
@@ -101,7 +101,8 @@ FROM (
            unnest($13::timestamptz[]) AS next_attempt_at,
            unnest($14::timestamptz[])   AS scheduled_at,
            unnest($15::text[])           AS template_id,
-           unnest($16::text[])          AS template_vars
+           unnest($16::text[])          AS template_vars,
+           unnest($17::text[])           AS traceparent
 ) AS u
 ON CONFLICT (idempotency_key) DO NOTHING
 RETURNING id
@@ -124,11 +125,12 @@ type InsertNotificationsBulkParams struct {
 	ScheduledAts    []time.Time
 	TemplateIds     []string
 	TemplateVars    []string
+	Traceparents    []string
 }
 
 // One statement for the whole batch (SC-002). sqlc arrays can't carry NULLs, so nullable columns
 // use sentinels that NULLIF turns back into NULL: ” for the idempotency key and template id,
-// the zero time for scheduled_at, ” for template_vars. Conflicting idempotency keys are skipped
+// the zero time for scheduled_at, ” for template_vars and traceparent. Conflicting idempotency keys are skipped
 // (ON CONFLICT DO NOTHING) and resolved by the repository afterwards.
 func (q *Queries) InsertNotificationsBulk(ctx context.Context, arg InsertNotificationsBulkParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, insertNotificationsBulk,
@@ -148,6 +150,7 @@ func (q *Queries) InsertNotificationsBulk(ctx context.Context, arg InsertNotific
 		arg.ScheduledAts,
 		arg.TemplateIds,
 		arg.TemplateVars,
+		arg.Traceparents,
 	)
 	if err != nil {
 		return nil, err
@@ -168,7 +171,7 @@ func (q *Queries) InsertNotificationsBulk(ctx context.Context, arg InsertNotific
 }
 
 const listByBatch = `-- name: ListByBatch :many
-SELECT id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at FROM notifications WHERE batch_id = $1 ORDER BY created_at, id
+SELECT id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at, traceparent FROM notifications WHERE batch_id = $1 ORDER BY created_at, id
 `
 
 func (q *Queries) ListByBatch(ctx context.Context, batchID *uuid.UUID) ([]Notification, error) {
@@ -204,6 +207,7 @@ func (q *Queries) ListByBatch(ctx context.Context, batchID *uuid.UUID) ([]Notifi
 			&i.SentAt,
 			&i.CancelledAt,
 			&i.FailedAt,
+			&i.Traceparent,
 		); err != nil {
 			return nil, err
 		}
@@ -216,7 +220,7 @@ func (q *Queries) ListByBatch(ctx context.Context, batchID *uuid.UUID) ([]Notifi
 }
 
 const listByIdempotencyKeys = `-- name: ListByIdempotencyKeys :many
-SELECT id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at FROM notifications WHERE idempotency_key = ANY($1::text[])
+SELECT id, batch_id, idempotency_key, payload_hash, channel, recipient, content, priority, status, attempts, max_attempts, next_attempt_at, scheduled_at, template_id, template_vars, provider_message_id, last_error, correlation_id, created_at, updated_at, sent_at, cancelled_at, failed_at, traceparent FROM notifications WHERE idempotency_key = ANY($1::text[])
 `
 
 func (q *Queries) ListByIdempotencyKeys(ctx context.Context, keys []string) ([]Notification, error) {
@@ -252,6 +256,7 @@ func (q *Queries) ListByIdempotencyKeys(ctx context.Context, keys []string) ([]N
 			&i.SentAt,
 			&i.CancelledAt,
 			&i.FailedAt,
+			&i.Traceparent,
 		); err != nil {
 			return nil, err
 		}

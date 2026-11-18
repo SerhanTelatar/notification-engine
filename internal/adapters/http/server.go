@@ -72,7 +72,11 @@ func NewRouter(log *slog.Logger, s gen.StrictServerInterface, opts ...RouterOpti
 		o(&cfg)
 	}
 	r := chi.NewRouter()
-	r.Use(Recover(log), CorrelationID, AccessLog(log))
+	r.Use(Recover(log), CorrelationID)
+	if cfg.tracing.Enabled() {
+		r.Use(RequestTracing(cfg.tracing)) // before the access log, so its lines run inside the span
+	}
+	r.Use(AccessLog(log))
 	if cfg.metrics != nil {
 		r.Use(RequestMetrics(cfg.metrics))
 	}

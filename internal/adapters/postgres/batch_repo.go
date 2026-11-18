@@ -224,7 +224,7 @@ func bulkParams(batchID uuid.UUID, b domain.Batch, items []*domain.Notification)
 		Channels: make([]string, n), Recipients: make([]string, n), Contents: make([]string, n),
 		Priorities: make([]int16, n), Statuses: make([]string, n), MaxAttempts: make([]int32, n),
 		NextAttemptAts: make([]time.Time, n), ScheduledAts: make([]time.Time, n),
-		TemplateIds: make([]string, n), TemplateVars: make([]string, n),
+		TemplateIds: make([]string, n), TemplateVars: make([]string, n), Traceparents: make([]string, n),
 	}
 	for i, it := range items {
 		id, err := uuid.Parse(it.ID)
@@ -240,6 +240,7 @@ func bulkParams(batchID uuid.UUID, b domain.Batch, items []*domain.Notification)
 		p.Priorities[i], p.Statuses[i] = int16(it.Priority), string(it.Status)
 		p.MaxAttempts[i] = int32(min(it.MaxAttempts, 1<<30)) //nolint:gosec // bounded
 		p.NextAttemptAts[i] = it.NextAttemptAt
+		p.Traceparents[i] = it.TraceParent
 		if it.ScheduledAt != nil {
 			p.ScheduledAts[i] = *it.ScheduledAt
 		}
