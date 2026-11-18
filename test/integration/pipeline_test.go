@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -41,6 +42,7 @@ type pipelineConfig struct {
 	sendOffset      time.Duration        // pacing after the claim; 0 = none
 	breaker         ports.CircuitBreaker // nil = pass-through
 	maxDeferAge     time.Duration        // BREAKER_MAX_DEFER_AGE; 0 = none
+	log             *slog.Logger         // nil = quiet
 }
 
 func defaultPipeline(providerURL string) pipelineConfig {
@@ -107,6 +109,10 @@ func queueDepth(t testing.TB, queue string) int {
 
 func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 	t.Helper()
+	quietLog := quietLog
+	if cfg.log != nil {
+		quietLog = cfg.log
+	}
 	conn, err := rabbitmq.Dial(env.AMQPURL, "test-worker")
 	if err != nil {
 		t.Fatal(err)

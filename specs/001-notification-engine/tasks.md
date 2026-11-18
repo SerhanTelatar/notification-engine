@@ -699,7 +699,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - 400 responses never trip it
   - with `BREAKER_MAX_DEFER_AGE=3s` and the mock still failing, an sms notification ends `failed`
     with `last_error=provider_unavailable` and one message in `notifications.dlq`
-- [ ] T089 [P] [US7] Write the observability integration test in
+- [X] T089 [P] [US7] Write the observability integration test in
   `test/integration/observability_test.go`:
   - capture slog output from the api and the worker → every line for a request with
     `X-Correlation-ID: t-1` carries `t-1`, including the worker lines (SC-011)

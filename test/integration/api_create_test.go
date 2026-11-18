@@ -26,6 +26,19 @@ var quietLog = slog.New(slog.NewTextHandler(io.Discard, nil))
 // newAPI serves the real HTTP adapter over the real repository (no worker).
 func newAPI(t testing.TB) *httptest.Server {
 	t.Helper()
+	return newAPIWith(t, quietLog)
+}
+
+// newAPIWith serves the API with log; extra router options (e.g. metrics) are passed through.
+func newAPIWith(t testing.TB, quietLog *slog.Logger, opts ...httpapi.RouterOption) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(apiHandler(quietLog, opts...))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// apiHandler is the API router wired to the test database, the way cmd/api wires it.
+func apiHandler(quietLog *slog.Logger, opts ...httpapi.RouterOption) http.Handler {
 	repo := postgres.NewNotificationRepo(env.Pool)
 	creator := app.NewCreator(app.CreatorDeps{
 		Repo: repo, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5,
@@ -36,9 +49,7 @@ func newAPI(t testing.TB) *httptest.Server {
 			Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5}),
 		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(env.Pool),
 			Events: noop.Broadcaster{}, Clock: noop.Clock{}, Log: quietLog})})
-	ts := httptest.NewServer(httpapi.NewRouter(quietLog, srv))
-	t.Cleanup(ts.Close)
-	return ts
+	return httpapi.NewRouter(quietLog, srv, opts...)
 }
 
 type apiResponse struct {
