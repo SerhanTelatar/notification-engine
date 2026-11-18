@@ -660,7 +660,7 @@ filters applied; `limit=101` or a bad cursor → 400 (quickstart #10).
   - run `make gen`, implement it in the repo, and add the `listNotifications` handler in
     `internal/adapters/http/notifications.go`
   - makes T083 pass
-- [ ] T086 [P] [US6] Write `specs/adr/0006-keyset-pagination.md` from R13.
+- [X] T086 [P] [US6] Write `specs/adr/0006-keyset-pagination.md` from R13.
 
 **Checkpoint**: list and filter work on their own.
 
