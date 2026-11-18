@@ -601,7 +601,7 @@ both times and never received; cancel a `sent` one → 409 with `current_status`
   - already `cancelled` → success with no change
   - unknown → `ErrNotFound`
   - batch counts: cancelled / already_cancelled / not_cancellable
-- [ ] T078 [P] [US5] Write the cancel integration test in `test/integration/cancel_test.go`:
+- [X] T078 [P] [US5] Write the cancel integration test in `test/integration/cancel_test.go`:
   - cancel a `queued` notification whose message is in RabbitMQ → the consumer acks and the
     provider is never called
   - race ×100: cancel concurrently with the consumer → exactly one wins and no `cancelled` row has
