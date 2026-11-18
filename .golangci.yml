@@ -1,0 +1,84 @@
+# golangci-lint v2 configuration (pinned image golangci/golangci-lint:v2.15.0, see Makefile).
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags: [integration]
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - errorlint    # errors.Is/As and %w (Constitution VI)
+    - wrapcheck    # errors from other packages are wrapped with context
+    - contextcheck # context.Context propagated, not replaced
+    - noctx        # outbound HTTP/SQL calls carry a context
+    - bodyclose
+    - revive
+    - depguard     # hexagonal import direction (Constitution II)
+  settings:
+    wrapcheck:
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+      ignore-package-globs:
+        # Errors from our own packages are already domain-shaped.
+        - github.com/SerhanTelatar/notification-engine/*
+    revive:
+      rules:
+        - name: exported
+          disabled: true # internal packages; doc comments where they add value
+        - name: package-comments
+          disabled: true
+    depguard:
+      rules:
+        domain-is-pure:
+          files:
+            - "**/internal/domain/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/SerhanTelatar/notification-engine/internal/domain
+          deny:
+            - pkg: database/sql
+              desc: domain must not touch storage
+            - pkg: net/http
+              desc: domain must not touch transport
+        app-and-ports-depend-on-ports-only:
+          files:
+            - "**/internal/app/**"
+            - "**/internal/ports/**"
+          list-mode: lax
+          deny:
+            - pkg: github.com/SerhanTelatar/notification-engine/internal/adapters
+              desc: use cases depend on ports, never on adapters
+            - pkg: github.com/SerhanTelatar/notification-engine/internal/platform
+              desc: use cases receive platform services through ports
+            - pkg: github.com/jackc/pgx
+              desc: storage belongs in internal/adapters/postgres
+            - pkg: github.com/rabbitmq/amqp091-go
+              desc: AMQP belongs in internal/adapters/rabbitmq
+            - pkg: github.com/redis/go-redis
+              desc: Redis belongs in internal/adapters/redis
+            - pkg: net/http
+              desc: transport belongs in adapters
+  exclusions:
+    generated: lax
+    paths:
+      - internal/adapters/http/gen
+      - internal/adapters/postgres/sqlcgen
+    rules:
+      - path: _test\.go
+        linters: [wrapcheck, noctx]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/SerhanTelatar/notification-engine

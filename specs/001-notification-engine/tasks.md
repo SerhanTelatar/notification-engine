@@ -44,7 +44,7 @@ green.
   (`go test -race -tags integration ./...`), `test-unit`, `lint`, `demo-burst` and `gen-check`
   (`make gen && git diff --exit-code`). Each target must also run inside the `golang` image when
   `DOCKER=1` (R1).
-- [ ] T003 [P] Create `.golangci.yml`:
+- [X] T003 [P] Create `.golangci.yml`:
   - linters gofmt, goimports, errorlint, wrapcheck, contextcheck, errcheck, revive
   - `depguard` rules so `internal/domain` imports only the stdlib
   - `internal/app` and `internal/ports` must not import `internal/adapters` or
