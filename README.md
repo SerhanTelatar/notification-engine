@@ -8,6 +8,13 @@ REST API, stores them durably, and delivers them through an external provider wi
 - crash recovery;
 - full observability.
 
+The bonus features are built too:
+- send by **template**;
+- **real-time status updates** over WebSocket;
+- **OpenTelemetry tracing** across the outbox;
+- a **metrics summary** endpoint;
+- a provisioned **Grafana** dashboard.
+
 The design is specified in [`specs/001-notification-engine/`](specs/001-notification-engine/)
 (spec, plan, research, data model, contracts, tasks), and the key decisions are recorded as ADRs
 in [`specs/adr/`](specs/adr/).
@@ -32,6 +39,10 @@ You only need Docker with Compose v2.
 ```bash
 cp .env.example .env          # optional: every value in it is the default
 docker compose up --build     # postgres, rabbitmq, redis, migrate, api, worker, mockprovider
+
+# With Prometheus, Grafana and Jaeger. For traces, first set in .env:
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+docker compose --profile observability up --build
 ```
 
 | URL | What |
@@ -39,12 +50,17 @@ docker compose up --build     # postgres, rabbitmq, redis, migrate, api, worker,
 | http://localhost:8080/swagger | API docs (Swagger UI over [`api/openapi.yaml`](api/openapi.yaml)) |
 | http://localhost:8080/readyz · http://localhost:9090/readyz | API / worker readiness |
 | http://localhost:8080/metrics · http://localhost:9090/metrics | Prometheus metrics |
-
-Workers publish their ops port from the range 9090–9099, so `docker compose up --scale worker=2`
-works. A single worker usually gets 9090; `docker compose port --index N worker 9090` shows where
-each replica landed.
+| http://localhost:8080/api/v1/metrics/summary | JSON summary: backlog plus each channel's last 5 minutes |
+| `ws://localhost:8080/ws?notification_id=…` (or `batch_id=…`) | Live status updates |
 | http://localhost:15672 (guest/guest) | RabbitMQ management UI |
 | http://localhost:8090/received | Calls received by the mock provider ([contract](specs/001-notification-engine/contracts/provider.md)) |
+| http://localhost:3000 | Grafana dashboard (observability profile; anonymous viewer) |
+| http://localhost:9190 | Prometheus (observability profile) |
+| http://localhost:16686 | Jaeger traces (observability profile, with the OTLP endpoint set) |
+
+Workers publish their ops port from the range 9090–9099, so `docker compose up --scale worker=2`
+works. A single worker usually gets 9090, but a restart can move it;
+`docker compose port --index N worker 9090` shows where each replica landed.
 
 `make demo-burst` submits 5,000 mixed-priority SMS in batches. You can watch them drain at about
 95/s at the mock provider. To use webhook.site instead of the mock, set
@@ -57,8 +73,8 @@ Two binaries share one codebase:
 - **`worker`** runs the outbox relay, the per-channel consumers, the reaper and the backlog
   sampler.
 
-PostgreSQL is the source of truth. RabbitMQ dispatches work, and Redis holds the shared
-rate-limiter state.
+PostgreSQL is the source of truth. RabbitMQ dispatches work. Redis holds the shared
+rate-limiter state and carries status events to the WebSocket clients.
 
 ```mermaid
 flowchart LR
@@ -81,6 +97,10 @@ flowchart LR
     consumer -->|"failed ⇒ reject"| dlq[[notifications.dlq]]
     reaper -->|"stuck sending / queued"| pg
     sampler -->|"notification_backlog<br/>rabbitmq_queue_messages"| prom([Prometheus])
+    api -. "status events (best-effort)" .-> redis
+    consumer -. "status events" .-> redis
+    redis -. "pub/sub notification-status" .-> api
+    api -. "/ws snapshot + updates" .-> client
 ```
 
 The life of a notification:
@@ -106,6 +126,18 @@ The life of a notification:
    Failures go to `notifications.dlq` through the dead-letter exchange.
 5. **Reaper.** It recovers rows stranded by a crash: `sending` for more than 2 min, and `queued`
    for more than 15 min.
+6. **Status events.** After each committed transition, the process that made it publishes an
+   event on Redis. Every API instance relays it to its WebSocket subscribers
+   ([ADR 0007](specs/adr/0007-realtime-fanout-via-redis-pubsub.md)).
+
+**Templates.** A template-based create is rendered in the API at submission, and the rendered
+text is what's stored and sent, so the worker never sees templates
+([ADR 0008](specs/adr/0008-restricted-templates.md)).
+
+**Tracing.** With tracing on, the API stores the request's W3C `traceparent` on the row, just as
+it stores the correlation id. The relay's publish (possibly much later), the delivery and the
+provider call therefore all join the request's trace across both processes:
+`POST /api/v1/notifications` → `publish notifications.sms` → `deliver sms` → `provider send`.
 
 The code is hexagonal: `domain` (stdlib only) ← `ports` ← `app` (use cases) ← `adapters` (http,
 postgres, rabbitmq, redis, provider), wired in `cmd/*/main.go`. `depguard` enforces the import
@@ -123,7 +155,8 @@ sqlc. CI fails if the generated code drifts.
 | [0004](specs/adr/0004-redis-gcra-rate-limiter.md) | Distributed rate limiting with GCRA in a Redis Lua script; calls are paced on their slot; 5% headroom |
 | [0005](specs/adr/0005-retry-backoff-and-circuit-breaker.md) | Full-jitter exponential backoff with Retry-After, per-channel circuit breakers, deferral without using attempts, and the `BREAKER_MAX_DEFER_AGE` cap |
 | [0006](specs/adr/0006-keyset-pagination.md) | Keyset pagination on `(created_at, id)` with an opaque cursor |
-| 0007, 0008 | Reserved for the bonus phases: real-time fan-out over Redis pub/sub (US9) and templates (US8). They aren't implemented yet; see [what I'd do with more time](#what-id-do-with-more-time) |
+| [0007](specs/adr/0007-realtime-fanout-via-redis-pubsub.md) | Real-time status updates: publish after commit to Redis pub/sub; every API instance fans out to its WebSocket clients; best-effort, with a snapshot on connect |
+| [0008](specs/adr/0008-restricted-templates.md) | Fields-only templates (`{{.Name}}`), checked on the parse tree; every missing variable named; rendered at submission |
 
 **Migrations run once, in their own service** (research R14). They are goose SQL files embedded in
 the `api` binary. In Compose, a one-shot `migrate` service runs `api migrate up`, and `api` and
@@ -135,7 +168,8 @@ would race. `make migrate` runs the same command against the stack.
   [`data-model.md`](specs/001-notification-engine/data-model.md) is enforced by the database, not
   by hoping callers behave.
 - All configuration comes from the environment.
-- Nothing is registered globally (Prometheus registries and loggers are injected).
+- Nothing is registered globally: Prometheus registries, loggers and the OpenTelemetry tracer
+  provider are all injected.
 
 ## Trade-offs and known limits
 
@@ -162,10 +196,16 @@ would race. `make migrate` runs the same command against the stack.
     worker) lower-priority items that are already in hand.
   - That matches the spec ("a delivery in progress is never pre-empted"). The priority test
     asserts the bound.
-- **WebSocket updates are best effort** (bonus US9, not built yet). Status is always correct in
-  Postgres and via `GET`. The planned fan-out over Redis pub/sub would drop events while Redis is
-  down or a subscriber is slow, and it doesn't replay history. That's why Redis is only *optional*
-  for API readiness (`degraded`).
+- **WebSocket updates are best effort.** Status is always correct in Postgres and via `GET`.
+  - Events published while Redis is down are lost.
+  - A subscriber that falls 64 messages behind is dropped with close code 1008.
+  - History isn't replayed.
+  - Order isn't guaranteed either: the relay's `queued` and a consumer's `sending` race on Redis.
+  - Clients reconnect for a fresh snapshot and reconcile by `at`. Redis is therefore only
+    *optional* for API readiness (`degraded`). ([ADR 0007](specs/adr/0007-realtime-fanout-via-redis-pubsub.md))
+- **Templates are fields-only.** There are no conditionals, loops or formatting helpers. In
+  exchange, a send names every missing variable at once, a template can't loop or run functions,
+  and output stays bounded. ([ADR 0008](specs/adr/0008-restricted-templates.md))
 - **Rate-limit headroom: `RATE_LIMIT_HEADROOM=0.05`, kept deliberately.**
   - Slots are spaced 5% wider than `1s / RATE_LIMIT_PER_SECOND`, about 95/s per channel at a limit
     of 100. That's still inside SC-003's 90–100 band.
@@ -257,6 +297,19 @@ curl -s -X POST $API/notifications/batch -H 'Content-Type: application/json' \
                {"recipient":"device-token-1","channel":"push","content":"b","priority":"low"}]}'
 curl -s $API/batches/<batch_id>
 curl -s -X POST $API/batches/<batch_id>/cancel
+
+# Templates: only {{.Field}} actions; every missing variable is named in one 400
+curl -s -X POST $API/templates -H 'Content-Type: application/json' \
+  -d '{"name":"otp","body":"Hi {{.Name}}, your code is {{.Code}}"}'
+curl -s -X POST $API/notifications -H 'Content-Type: application/json' \
+  -d '{"recipient":"+905551234567","channel":"sms","template_id":"<template_id>","variables":{"Name":"Ada","Code":"1234"}}'
+curl -s $API/templates
+
+# Live status updates: a snapshot, then one message per transition
+websocat "ws://localhost:8080/ws?notification_id=<id>"
+
+# Operational summary computed from the database (last 5 minutes)
+curl -s $API/metrics/summary
 ```
 
 Errors share one shape: `{"error": {"code", "message", "details": [{"field", "message"}]}}`. A
@@ -295,6 +348,7 @@ variable with its default.
 | `REAPER_INTERVAL` | `30s` | Crash-recovery pass |
 | `REAPER_SENDING_TIMEOUT` | `2m` | `sending` older than this is recovered |
 | `REAPER_QUEUED_TIMEOUT` | `15m` | `queued` older than this is republished |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | OTLP/HTTP endpoint for traces, e.g. `http://jaeger:4318`; empty turns tracing off |
 
 ## Running the tests
 
@@ -307,7 +361,8 @@ make loadtest    # 10,000 creates with vegeta against the running stack (p50/p95
 ```
 
 - **Unit tests** cover the domain and the use cases with in-memory fakes: validation, the state
-  machine, backoff, delivery decisions, breaker deferral and its cap, the sampler, and cursors.
+  machine, backoff, delivery decisions, breaker deferral and its cap, the sampler, cursors,
+  template parsing and rendering, the WebSocket hub, and the summary.
 - **Integration tests** (`test/integration/`, build tag `integration`) wire the real adapters
   against Postgres, RabbitMQ and Redis containers and a scriptable mock provider. They cover:
   - delivery, retries and the DLQ;
@@ -320,7 +375,13 @@ make loadtest    # 10,000 creates with vegeta against the running stack (p50/p95
   - graceful shutdown;
   - correlated logs with no PII;
   - the metrics contract;
-  - readiness under broker and Redis outages.
+  - readiness under broker and Redis outages;
+  - templates end to end;
+  - WebSocket updates from the worker within 1 s (SC-010);
+  - one trace from request to provider;
+  - the metrics summary on seeded data.
+- **`deploy/dashboard_test.go`** checks that the Grafana dashboard queries only metrics listed in
+  `contracts/observability.md`.
 - **CI** (GitHub Actions) runs lint, gen-check, unit and integration tests, and the image build
   on every pull request and on pushes to `main`. Merges to `main` require green CI.
 
@@ -332,9 +393,10 @@ recorded in
 
 ## What I'd do with more time
 
-- **The bonus stories**: templates (US8), WebSocket status updates over Redis pub/sub (US9), the
-  metrics summary endpoint, OpenTelemetry tracing, and a Grafana dashboard. Their ADRs (0007,
-  0008) are reserved.
+- **Alerting**: Prometheus rules (and runbooks) for a growing backlog, an open breaker,
+  dead-letter rate, limiter timeouts and an e2e p95 SLO, next to the dashboard.
+- **Ordered, resumable status streams**: a per-notification sequence number and a replay cursor,
+  so WebSocket clients can resume after a disconnect instead of re-snapshotting.
 - **A shared breaker hint**: an "open until" key in Redis that workers read on deferral. This
   would cut the N-probe effect of per-process breakers without putting Redis in every call's path.
 - **Partitioned or archived history**: `notifications` and `attempts` grow without bound. Monthly

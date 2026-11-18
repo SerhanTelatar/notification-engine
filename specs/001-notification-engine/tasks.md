@@ -933,7 +933,7 @@ including transitions made by the worker.
     (`deploy/grafana/dashboards/notifications.json`): backlog by channel/priority, delivery rate
     by outcome, e2e/provider p95, breaker state
   - add prometheus and grafana to the compose `observability` profile
-- [ ] T119 Update `README.md` with the bonus features (templates, WebSocket, summary, tracing,
+- [X] T119 Update `README.md` with the bonus features (templates, WebSocket, summary, tracing,
   Grafana). Run the full quickstart.md (#1–#18), `make lint`, `make gen-check` and `make test`;
   make sure CI is green.
 
