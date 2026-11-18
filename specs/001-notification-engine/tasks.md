@@ -140,7 +140,7 @@ needs.
   - boundary tests in `internal/domain/validate_test.go`: 160/161, 4000/4001 bytes, multi-byte
     runes, invalid E.164, email with a display name
   - depends on T018 and T020
-- [ ] T022 Implement the Notification aggregate in `internal/domain/notification.go`:
+- [X] T022 Implement the Notification aggregate in `internal/domain/notification.go`:
   - `NewNotification(req, now, maxAttempts, id)` sets `pending`, or `scheduled` only when
     `data-model.md notifications.scheduled_at` is in the future
   - sets `data-model.md notifications.next_attempt_at` (scheduled_at or now) and
