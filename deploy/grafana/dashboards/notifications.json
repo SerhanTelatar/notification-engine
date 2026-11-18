@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -83,7 +83,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "End-to-end latency p95",
-      "description": "sent_at \u2212 max(created_at, scheduled_at).",
+      "description": "sent_at \u2212 max(created_at, scheduled_at). Empty while nothing is being sent: percentiles need traffic in the window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -96,7 +96,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No traffic in the last 5 minutes"
         },
         "overrides": []
       },
@@ -106,7 +107,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, channel) (rate(notification_e2e_latency_seconds_bucket[5m])))",
+          "expr": "(histogram_quantile(0.95, sum by (le, channel) (rate(notification_e2e_latency_seconds_bucket[5m])))) >= 0",
           "legendFormat": "{{channel}}",
           "refId": "A"
         }
@@ -116,7 +117,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "Provider latency p95",
-      "description": "",
+      "description": "Empty while nothing is being sent: percentiles need traffic in the window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -129,7 +130,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No traffic in the last 5 minutes"
         },
         "overrides": []
       },
@@ -139,7 +141,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, channel) (rate(provider_request_duration_seconds_bucket[5m])))",
+          "expr": "(histogram_quantile(0.95, sum by (le, channel) (rate(provider_request_duration_seconds_bucket[5m])))) >= 0",
           "legendFormat": "{{channel}}",
           "refId": "A"
         }
@@ -304,7 +306,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "API latency p95 by route",
-      "description": "SC-001: POST /api/v1/notifications p95 < 200 ms.",
+      "description": "SC-001: POST /api/v1/notifications p95 < 200 ms. Empty while nothing is being sent: percentiles need traffic in the window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -317,7 +319,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No traffic in the last 5 minutes"
         },
         "overrides": []
       },
@@ -327,7 +330,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, route, method) (rate(http_request_duration_seconds_bucket[5m])))",
+          "expr": "(histogram_quantile(0.95, sum by (le, route, method) (rate(http_request_duration_seconds_bucket[5m])))) >= 0",
           "legendFormat": "{{method}} {{route}}",
           "refId": "A"
         }
@@ -337,7 +340,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Rate limiter wait p95 and timeouts",
-      "description": "",
+      "description": "Empty while nothing is being sent: percentiles need traffic in the window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -350,7 +353,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No traffic in the last 5 minutes"
         },
         "overrides": []
       },
@@ -360,7 +364,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, channel) (rate(rate_limiter_wait_seconds_bucket[5m])))",
+          "expr": "(histogram_quantile(0.95, sum by (le, channel) (rate(rate_limiter_wait_seconds_bucket[5m])))) >= 0",
           "legendFormat": "wait p95 {{channel}}",
           "refId": "A"
         },
