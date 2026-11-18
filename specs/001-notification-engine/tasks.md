@@ -258,7 +258,7 @@ needs.
   - config → logger → pgx pool → metrics → health (postgres required) → server
   - graceful shutdown: `Shutdown`, then close the pool (R17)
   - depends on T026 and T029–T032
-- [ ] T034 Wire the skeleton of `cmd/worker/main.go`:
+- [X] T034 Wire the skeleton of `cmd/worker/main.go`:
   - config → logger → pool → metrics
   - ops server on `OPS_ADDR` with `/healthz`, `/readyz` and `/metrics`
   - an errgroup that runs components (none yet), with graceful shutdown
