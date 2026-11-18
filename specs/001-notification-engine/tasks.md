@@ -75,7 +75,7 @@ green.
   decision, alternatives, consequences).
 - [X] T011 [P] Write `specs/adr/0002-transactional-outbox-in-notifications-table.md` from R4,
   including the publish-inside-tx race fix and relay backpressure.
-- [ ] T012 [P] Write `specs/adr/0003-at-least-once-with-idempotency.md` from R7, including the
+- [X] T012 [P] Write `specs/adr/0003-at-least-once-with-idempotency.md` from R7, including the
   documented residual duplicate window.
 
 ---
