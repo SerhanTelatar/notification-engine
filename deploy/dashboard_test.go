@@ -61,6 +61,7 @@ func TestDashboardUsesContractMetrics(t *testing.T) {
 		t.Fatal("dashboard needs a uid and panels")
 	}
 	name := regexp.MustCompile(`\b([a-z][a-z0-9_]*_(?:total|seconds|bucket|count|sum|state|backlog|messages|connections))\b`)
+	window := regexp.MustCompile(`\[[^\]]+\]`)
 	titles := map[string]bool{}
 	for _, p := range d.Panels {
 		titles[p.Title] = true
@@ -81,6 +82,15 @@ func TestDashboardUsesContractMetrics(t *testing.T) {
 					t.Errorf("panel %q: set fieldConfig.defaults.noValue for idle windows", p.Title)
 				}
 			}
+			// Rates use Grafana's $__rate_interval (≥ 4 scrapes, ≥ step + scrape), not a fixed
+			// 1m: a fixed minute smears a 3-second burst into a low, minute-long hump.
+			if !strings.Contains(tg.Expr, "histogram_quantile(") {
+				for _, w := range window.FindAllString(tg.Expr, -1) {
+					if w != "[$__rate_interval]" {
+						t.Errorf("panel %q uses the range %s; use [$__rate_interval]", p.Title, w)
+					}
+				}
+			}
 			for _, m := range name.FindAllString(tg.Expr, -1) {
 				base := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(m, "_bucket"), "_count"), "_sum")
 				if !metrics[m] && !metrics[base] {
@@ -94,5 +104,16 @@ func TestDashboardUsesContractMetrics(t *testing.T) {
 		if !titles[want] {
 			t.Errorf("dashboard lacks the %q panel", want)
 		}
+	}
+}
+
+// $__rate_interval needs the real scrape interval (5 s); Grafana otherwise assumes 15 s.
+func TestDatasourceDeclaresScrapeInterval(t *testing.T) {
+	b, err := os.ReadFile("grafana/provisioning/datasources/prometheus.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?m)^\s+timeInterval:\s*"?5s"?\s*$`).Match(b) {
+		t.Fatal(`the prometheus datasource must set jsonData.timeInterval: "5s" (the scrape interval)`)
 	}
 }

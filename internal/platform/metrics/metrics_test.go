@@ -109,3 +109,25 @@ func TestRecorderWritesTheCollectors(t *testing.T) {
 		t.Fatalf("reaped = %v", v)
 	}
 }
+
+// HTTP latency series exist at zero before the first request, so increase()/rate() in Grafana
+// count the very first requests instead of starting from the first scraped value.
+func TestInitHTTPPreCreatesRouteSeries(t *testing.T) {
+	reg := NewRegistry()
+	m := NewAPI(reg)
+	m.InitHTTP([]HTTPRoute{{Route: "/api/v1/notifications", Method: "POST", Code: "202"}})
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range families {
+		if f.GetName() != "http_request_duration_seconds" {
+			continue
+		}
+		if len(f.GetMetric()) != 1 || f.GetMetric()[0].GetHistogram().GetSampleCount() != 0 {
+			t.Fatalf("want one zero series, got %v", f.GetMetric())
+		}
+		return
+	}
+	t.Fatal("http_request_duration_seconds not exposed before the first request")
+}
