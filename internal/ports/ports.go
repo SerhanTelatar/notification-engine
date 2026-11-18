@@ -140,12 +140,32 @@ type BatchCancelResult struct {
 	NotCancellable   int
 }
 
+// BatchItemKind is what happened to one batch item in the database.
+type BatchItemKind int
+
+const (
+	// BatchItemCreated: a new notification in this batch.
+	BatchItemCreated BatchItemKind = iota
+	// BatchItemReplayed: the idempotency key already existed with the same payload; Stored is the
+	// original notification.
+	BatchItemReplayed
+	// BatchItemConflict: the idempotency key already existed with a different payload; the item is
+	// rejected and Stored is the existing notification.
+	BatchItemConflict
+)
+
+// BatchItemOutcome pairs an item with its stored notification.
+type BatchItemOutcome struct {
+	Kind   BatchItemKind
+	Stored *domain.Notification
+}
+
 // BatchRepository persists batches and their notifications.
 type BatchRepository interface {
-	// CreateBatch inserts the batch and its accepted items in one transaction. For each item it
-	// returns the stored row and whether it was newly created (idempotent items may resolve to
-	// existing rows).
-	CreateBatch(ctx context.Context, b domain.Batch, items []*domain.Notification) (stored []*domain.Notification, created []bool, err error)
+	// CreateBatch writes the batch row and its items in one transaction and returns one outcome
+	// per item, in order. b.TotalRejected carries the items the caller already rejected;
+	// conflicts are added to it, and created plus replayed items become TotalAccepted.
+	CreateBatch(ctx context.Context, b domain.Batch, items []*domain.Notification) ([]BatchItemOutcome, error)
 	GetBatch(ctx context.Context, id string) (*domain.Batch, BatchCounts, []domain.Notification, error)
 	CancelBatch(ctx context.Context, id string, at time.Time) (BatchCancelResult, error)
 }

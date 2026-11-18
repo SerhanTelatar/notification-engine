@@ -571,7 +571,7 @@ items not early (quickstart #11).
   batches.correlation_id`), a bulk `InsertNotifications` using `unnest(...) ON CONFLICT
   (idempotency_key) DO NOTHING RETURNING` (R13), `GetBatch`, `CountByStatus`, `ListByBatch`. Run
   `make gen`.
-- [ ] T074 [US4] Implement `internal/adapters/postgres/batch_repo.go` (`ports.BatchRepository`):
+- [X] T074 [US4] Implement `internal/adapters/postgres/batch_repo.go` (`ports.BatchRepository`):
   - the batch row and bulk insert in one tx
   - re-select conflicting keys and compare hashes per item (`data-model.md
     notifications.idempotency_key`, `data-model.md notifications.batch_id`)
