@@ -514,7 +514,7 @@ items not early (quickstart #11).
   - Redis stopped with `LIMITER_MAX_WAIT=2s` → the consumer `Nack(requeue=true)`s the message, the
     row stays `queued`, and it's delivered once Redis is back
   - also an end-to-end run through 2 worker instances checking the mock's timestamps (SC-003)
-- [ ] T067 [P] [US3] Write the priority and scheduling integration tests in
+- [X] T067 [P] [US3] Write the priority and scheduling integration tests in
   `test/integration/priority_schedule_test.go`:
   - a backlog of 300 low SMS, then 1 high → the high item is within the first
     `concurrency × workers + RELAY_BATCH_SIZE` sends (R10)
