@@ -89,7 +89,7 @@ needs.
 
 ### Platform
 
-- [ ] T013 [P] Implement env config in `internal/platform/config/config.go`:
+- [X] T013 [P] Implement env config in `internal/platform/config/config.go`:
   - typed `API` and `Worker` structs with the defaults from R19
   - durations parsed with `time.ParseDuration`
   - startup validation that returns all errors at once
