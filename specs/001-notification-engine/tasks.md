@@ -357,7 +357,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
 
 ### Implementation for User Story 1
 
-- [ ] T046 [US1] Implement `internal/domain/retry.go`:
+- [X] T046 [US1] Implement `internal/domain/retry.go`:
   - `Outcome` (`data-model.md notification_attempts.outcome`)
   - `Classify(httpStatus, err)`
   - `Backoff(attempt, base, max, retryAfter, rnd)` with full jitter
