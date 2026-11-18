@@ -285,7 +285,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   that enforces guarded transitions via `domain.CanTransition`, a fake clock, a recording
   publisher, a scriptable provider, a counting limiter, a scriptable breaker, and a recording
   broadcaster.
-- [ ] T036 [P] [US1] Write table-driven tests for classification and backoff in
+- [X] T036 [P] [US1] Write table-driven tests for classification and backoff in
   `internal/domain/retry_test.go`:
   - classification: 2xx success; 429/5xx/timeout/network transient; other 4xx/1xx/3xx permanent
   - full-jitter bounds per attempt, the 5 min cap, the Retry-After floor (seconds and HTTP-date),
