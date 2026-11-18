@@ -177,7 +177,7 @@ notifications 1 ──< notification_attempts
 | Relay quota (per channel) | `pg_try_advisory_xact_lock(hashtext('relay:'\|\|$channel))`; `SELECT count(*) … WHERE channel=$1 AND status='queued'`; `quota = min(batch, max_inflight − count)` |
 | Relay pick (per channel) | `SELECT … WHERE channel=$1 AND status IN (pending,scheduled,retrying) AND next_attempt_at <= now() ORDER BY priority DESC, next_attempt_at FOR UPDATE SKIP LOCKED LIMIT $quota` |
 | Mark queued | `UPDATE … SET status='queued' WHERE id = ANY($1) AND status IN (pending,scheduled,retrying)` (same tx as the pick) |
-| Start send | `UPDATE … SET status='sending' WHERE id=$1 AND status='queued' RETURNING *` |
+| Start send | one tx: `SELECT status … WHERE id=$1 FOR UPDATE` (waits for an open relay tx), then `UPDATE … SET status='sending' WHERE id=$1 AND status='queued' RETURNING *` |
 | Outcome | `UPDATE … WHERE id=$1 AND status='sending'` + `INSERT notification_attempts`, in one tx |
 | Defer (breaker open) | one tx: `queued → sending`, then `sending → retrying` with `next_attempt_at = now + remaining cool-down`, `attempts` unchanged and no attempt row. If `now − max(created_at, scheduled_at) > BREAKER_MAX_DEFER_AGE`, the second step is instead `sending → failed` with `last_error='provider_unavailable'` and `failed_at = now()` |
 | Cancel | `UPDATE … SET status='cancelled' WHERE id=$1 AND status IN (pending,scheduled,queued,retrying) RETURNING *`; on 0 rows, read the row to choose 404, 409 or 200 (already cancelled) |

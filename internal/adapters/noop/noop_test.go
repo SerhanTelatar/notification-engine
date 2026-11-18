@@ -28,12 +28,12 @@ func TestUUIDv7IsTimeOrdered(t *testing.T) {
 
 func TestPassThroughs(t *testing.T) {
 	ctx := context.Background()
-	if err := (Limiter{}).Acquire(ctx, domain.ChannelSMS); err != nil {
+	if _, err := (Limiter{}).Acquire(ctx, domain.ChannelSMS); err != nil {
 		t.Fatal(err)
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if (Limiter{}).Acquire(cancelled, domain.ChannelSMS) == nil {
+	if _, err := (Limiter{}).Acquire(cancelled, domain.ChannelSMS); err == nil {
 		t.Fatal("a cancelled ctx must be reported")
 	}
 	called := false

@@ -15,7 +15,7 @@ import (
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 func TestUnbuiltOperationsReturn501(t *testing.T) {
-	h := NewRouter(quiet, NewServer(quiet, health.New(0)))
+	h := NewRouter(quiet, NewServer(Deps{Log: quiet, Health: health.New(0)}))
 	tests := []struct{ method, path, body string }{
 		{http.MethodPost, "/api/v1/notifications", `{"recipient":"+905551234567","channel":"sms","content":"hi"}`},
 		{http.MethodGet, "/api/v1/notifications", ""},
@@ -41,7 +41,7 @@ func TestUnbuiltOperationsReturn501(t *testing.T) {
 }
 
 func TestBadPathParamIs400(t *testing.T) {
-	h := NewRouter(quiet, NewServer(quiet, health.New(0)))
+	h := NewRouter(quiet, NewServer(Deps{Log: quiet, Health: health.New(0)}))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/notifications/not-a-uuid", nil))
 	if rec.Code != http.StatusBadRequest {

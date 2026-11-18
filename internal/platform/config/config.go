@@ -40,10 +40,12 @@ type Worker struct {
 	ProviderURL     string
 	ProviderTimeout time.Duration
 
-	RateLimitPerSecond int
-	LimiterMaxWait     time.Duration
-	BackoffBase        time.Duration
-	BackoffMax         time.Duration
+	RateLimitPerSecond  int
+	RateLimitSendOffset time.Duration
+	RateLimitHeadroom   float64
+	LimiterMaxWait      time.Duration
+	BackoffBase         time.Duration
+	BackoffMax          time.Duration
 
 	BreakerConsecutiveFailures int
 	BreakerCooldown            time.Duration
@@ -86,10 +88,12 @@ func LoadWorker(env Lookup) (Worker, error) {
 		ProviderURL:     r.str("PROVIDER_URL", "http://mockprovider:8090/send"),
 		ProviderTimeout: r.duration("PROVIDER_TIMEOUT", 5*time.Second),
 
-		RateLimitPerSecond: r.integer("RATE_LIMIT_PER_SECOND", 100, 1, 100000),
-		LimiterMaxWait:     r.duration("LIMITER_MAX_WAIT", 30*time.Second),
-		BackoffBase:        r.duration("BACKOFF_BASE", time.Second),
-		BackoffMax:         r.duration("BACKOFF_MAX", 5*time.Minute),
+		RateLimitPerSecond:  r.integer("RATE_LIMIT_PER_SECOND", 100, 1, 100000),
+		RateLimitSendOffset: r.duration("RATE_LIMIT_SEND_OFFSET", 50*time.Millisecond),
+		RateLimitHeadroom:   r.fraction("RATE_LIMIT_HEADROOM", 0.05, 0, 0.5),
+		LimiterMaxWait:      r.duration("LIMITER_MAX_WAIT", 30*time.Second),
+		BackoffBase:         r.duration("BACKOFF_BASE", time.Second),
+		BackoffMax:          r.duration("BACKOFF_MAX", 5*time.Minute),
 
 		BreakerConsecutiveFailures: r.integer("BREAKER_CONSECUTIVE_FAILURES", 5, 1, 1000),
 		BreakerCooldown:            r.duration("BREAKER_COOLDOWN", 30*time.Second),
@@ -179,6 +183,19 @@ func (r *reader) integer(key string, def, minV, maxV int) int {
 		return def
 	}
 	return n
+}
+
+func (r *reader) fraction(key string, def, minV, maxV float64) float64 {
+	v, ok := r.raw(key)
+	if !ok {
+		return def
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || f < minV || f > maxV {
+		r.fail("%s: %q must be a number in [%g, %g]", key, v, minV, maxV)
+		return def
+	}
+	return f
 }
 
 func (r *reader) duration(key string, def time.Duration) time.Duration {

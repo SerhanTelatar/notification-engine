@@ -122,3 +122,22 @@ func TestHTTPServerDrainsInFlightRequest(t *testing.T) {
 		t.Fatalf("serve returned %v", err)
 	}
 }
+
+func TestEvery(t *testing.T) {
+	var ticks, errs atomic.Int32
+	c := Every("ticker", 10*time.Millisecond, func(context.Context) error {
+		if ticks.Add(1)%2 == 0 {
+			return errors.New("transient")
+		}
+		return nil
+	}, func(error) { errs.Add(1) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 105*time.Millisecond)
+	defer cancel()
+	if err := c.Run(ctx); err != nil {
+		t.Fatalf("Every must stop cleanly on cancel: %v", err)
+	}
+	if ticks.Load() < 5 || errs.Load() < 2 {
+		t.Fatalf("ticks=%d errors=%d: errors must not stop the loop", ticks.Load(), errs.Load())
+	}
+}

@@ -55,8 +55,18 @@ type RelayResult struct {
 	Skipped string
 }
 
-// PublishFunc publishes rows inside the relay transaction. A non-nil error rolls it back.
+// PublishFunc publishes rows inside the relay transaction. A non-nil error rolls it back. Relay
+// rows carry their status from before the relay (pending, scheduled or retrying).
 type PublishFunc func(ctx context.Context, rows []domain.Notification) error
+
+// QuotaFunc turns a channel's current queued count into how many due rows to pick now. The
+// application owns the backpressure rule (research R4); <= 0 means skip the channel.
+type QuotaFunc func(queued int) int
+
+// ReapDecision decides how a stale sending row is recovered (research R5): retrying with an
+// abandoned attempt, or failed when attempts are exhausted. The repository applies it in the
+// same transaction that locked the row.
+type ReapDecision func(n domain.Notification) DeliveryOutcome
 
 // DeliveryOutcome is the result of one provider call, applied atomically with its attempt row.
 type DeliveryOutcome struct {
@@ -103,15 +113,17 @@ type NotificationRepository interface {
 	Cancel(ctx context.Context, id string, at time.Time) (n *domain.Notification, changed bool, err error)
 
 	// RelayTx runs one channel's relay pass in a single transaction (research R4): advisory lock,
-	// backpressure quota, pick due rows, mark queued, publish, commit or roll back.
-	RelayTx(ctx context.Context, ch domain.Channel, maxInflight, batch int, at time.Time, publish PublishFunc) (RelayResult, error)
+	// count queued, quota(queued) rows picked FOR UPDATE SKIP LOCKED, mark queued, publish, then
+	// commit, or roll back if publish fails.
+	RelayTx(ctx context.Context, ch domain.Channel, at time.Time, quota QuotaFunc, publish PublishFunc) (RelayResult, error)
 	// StartSending is the guarded queued → sending claim; ok=false means drop the message.
 	StartSending(ctx context.Context, id string, at time.Time) (n *domain.Notification, ok bool, err error)
 	ApplyOutcome(ctx context.Context, o DeliveryOutcome) error
 	DeferSending(ctx context.Context, d Deferral) error
 
-	// ReapStaleSending recovers rows stuck in sending since before olderThan (research R5).
-	ReapStaleSending(ctx context.Context, olderThan, at time.Time, limit int) ([]domain.Notification, error)
+	// ReapStaleSending recovers rows stuck in sending since before olderThan (research R5),
+	// applying decide to each locked row. It returns the rows after recovery.
+	ReapStaleSending(ctx context.Context, olderThan time.Time, limit int, decide ReapDecision) ([]domain.Notification, error)
 	// RepublishStaleQueued republishes rows stuck in queued without changing their status.
 	RepublishStaleQueued(ctx context.Context, olderThan, at time.Time, limit int, publish PublishFunc) (int, error)
 
@@ -158,6 +170,34 @@ type Message struct {
 	CorrelationID  string
 	EnqueuedAt     time.Time
 }
+
+// Decision tells the consumer what to do with a delivered message.
+type Decision int
+
+const (
+	// DecisionAck: the work is done or must be dropped (cancelled, duplicate, already terminal).
+	DecisionAck Decision = iota
+	// DecisionRequeue: release the message back to the queue; the row is still queued.
+	DecisionRequeue
+	// DecisionDeadLetter: the notification failed; route the message to the DLQ.
+	DecisionDeadLetter
+)
+
+func (d Decision) String() string {
+	switch d {
+	case DecisionAck:
+		return "ack"
+	case DecisionRequeue:
+		return "requeue"
+	case DecisionDeadLetter:
+		return "dead_letter"
+	default:
+		return fmt.Sprintf("decision(%d)", int(d))
+	}
+}
+
+// MessageHandler processes one work message (the delivery pipeline).
+type MessageHandler func(ctx context.Context, msg Message) Decision
 
 // Publisher sends work messages. Publish returns nil only after every message is confirmed.
 type Publisher interface {
@@ -215,9 +255,11 @@ type CircuitBreaker interface {
 }
 
 // RateLimiter grants delivery permits per channel across all workers (FR-016). Acquire blocks
-// until a permit is granted or ctx ends; callers bound it with LIMITER_MAX_WAIT.
+// until the reserved slot arrives (or ctx ends) and returns that slot's local time; callers bound
+// it with LIMITER_MAX_WAIT. Slots are spaced exactly 1/limit apart, so a caller that starts its
+// provider call at slot + a constant offset keeps the calls themselves within the limit.
 type RateLimiter interface {
-	Acquire(ctx context.Context, ch domain.Channel) error
+	Acquire(ctx context.Context, ch domain.Channel) (slot time.Time, err error)
 }
 
 // ---------------------------------------------------------------------------------------------

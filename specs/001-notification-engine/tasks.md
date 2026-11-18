@@ -281,23 +281,23 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
 
 ### Tests for User Story 1 ⚠️ (write first)
 
-- [ ] T035 [P] [US1] Write in-memory port fakes in `internal/app/fakes_test.go`: a repository
+- [X] T035 [P] [US1] Write in-memory port fakes in `internal/app/fakes_test.go`: a repository
   that enforces guarded transitions via `domain.CanTransition`, a fake clock, a recording
   publisher, a scriptable provider, a counting limiter, a scriptable breaker, and a recording
   broadcaster.
-- [ ] T036 [P] [US1] Write table-driven tests for classification and backoff in
+- [X] T036 [P] [US1] Write table-driven tests for classification and backoff in
   `internal/domain/retry_test.go`:
   - classification: 2xx success; 429/5xx/timeout/network transient; other 4xx/1xx/3xx permanent
   - full-jitter bounds per attempt, the 5 min cap, the Retry-After floor (seconds and HTTP-date),
     and the max-attempts cut-off (R9)
-- [ ] T037 [P] [US1] Write unit tests for the create use case in `internal/app/create_test.go`:
+- [X] T037 [P] [US1] Write unit tests for the create use case in `internal/app/create_test.go`:
   - valid → 202 data with `pending`
   - scheduled-in-future → `scheduled`
   - validation errors collect every field
   - same key + same hash → original returned with replayed=true
   - same key + different hash → `ErrIdempotencyConflict`
   - a status event is broadcast after commit
-- [ ] T038 [P] [US1] Write unit tests for the delivery use case in `internal/app/deliver_test.go`
+- [X] T038 [P] [US1] Write unit tests for the delivery use case in `internal/app/deliver_test.go`
   (R6):
   - guard 0 rows → ack without a provider call
   - success → `sent` with the message id
@@ -308,30 +308,30 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - an attempt row is written with the outcome
   - no permit within `LIMITER_MAX_WAIT` → a release result (consumer `Nack(requeue=true)`); the row
     stays `queued` and the provider isn't called
-- [ ] T039 [P] [US1] Write unit tests for the relay in `internal/app/relay_test.go` (R4):
+- [X] T039 [P] [US1] Write unit tests for the relay in `internal/app/relay_test.go` (R4):
   - `quota = min(batch, max_inflight − queued)` is never negative
   - quota ≤ 0 → channel skipped and the skip metric incremented
   - lock not acquired → channel skipped
   - publish failure → tx rolled back and rows stay due
   - rows picked in `priority DESC, next_attempt_at` order
-- [ ] T040 [P] [US1] Write unit tests for the reaper in `internal/app/reaper_test.go` (R5):
+- [X] T040 [P] [US1] Write unit tests for the reaper in `internal/app/reaper_test.go` (R5):
   - stale `sending` → `retrying` with an `abandoned` attempt and attempts+1
   - stale `sending` at max attempts → `failed`
   - stale `queued` → republished with no status change
-- [ ] T041 [P] [US1] Write the repository integration tests in
+- [X] T041 [P] [US1] Write the repository integration tests in
   `test/integration/notification_repo_test.go`:
   - idempotent insert (same and different payload)
   - 20 concurrent inserts with the same key → 1 row
   - an illegal guarded transition returns 0 rows
   - the CHECK constraints reject invalid status/priority/attempts
   - two concurrent relay transactions with SKIP LOCKED + advisory lock → each row picked once
-- [ ] T042 [P] [US1] Write the create API integration test in `test/integration/api_create_test.go`:
+- [X] T042 [P] [US1] Write the create API integration test in `test/integration/api_create_test.go`:
   - 202 + `X-Correlation-ID` echoed
   - 400 with every field error for each channel rule (spec US1-AS3..6)
   - `Idempotency-Key` header replay returns `Idempotent-Replayed: true`
   - header and body keys that differ → 400
   - different payload with the same key → 409
-- [ ] T043 [P] [US1] Write the delivery and retry integration tests in
+- [X] T043 [P] [US1] Write the delivery and retry integration tests in
   `test/integration/delivery_test.go`:
   - create → `sent`, with 1 provider call that carries the `Idempotency-Key` header
   - 503 then 202 → `sent` with 2 attempts
@@ -342,12 +342,12 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - a 2xx with an unparsable body → `sent` with a null message id
   - 20 concurrent creates with the same idempotency key → after draining, the mock received
     exactly 1 call (SC-005)
-- [ ] T044 [P] [US1] Write the relay integration tests in `test/integration/relay_test.go`:
+- [X] T044 [P] [US1] Write the relay integration tests in `test/integration/relay_test.go`:
   - a publish that isn't confirmed (exchange deleted) → tx rolled back, rows still `pending`
   - backpressure: 5,000 SMS with `RELAY_MAX_INFLIGHT_PER_CHANNEL=1000` and 2 relays. The
     sampled sms `queued` count is never above 1000, the whole burst is delivered,
     `reaper_recovered_total{kind="queued"}` stays 0, and email isn't blocked
-- [ ] T045 [P] [US1] Write the crash-recovery integration tests in
+- [X] T045 [P] [US1] Write the crash-recovery integration tests in
   `test/integration/recovery_test.go`:
   - a stale `sending` row → retried by the reaper and then sent
   - a stale `queued` row without a message → republished and sent
@@ -357,13 +357,13 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
 
 ### Implementation for User Story 1
 
-- [ ] T046 [US1] Implement `internal/domain/retry.go`:
+- [X] T046 [US1] Implement `internal/domain/retry.go`:
   - `Outcome` (`data-model.md notification_attempts.outcome`)
   - `Classify(httpStatus, err)`
   - `Backoff(attempt, base, max, retryAfter, rnd)` with full jitter
   - `ShouldFail(attempts, maxAttempts)` (R9)
   - makes T036 pass
-- [ ] T047 [US1] Write `sql/queries/notifications.sql` and run `make gen`:
+- [X] T047 [US1] Write `sql/queries/notifications.sql` and run `make gen`:
   - `InsertNotification` (`ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`),
     `GetByIdempotencyKey`
   - `RelayTryLock` (`pg_try_advisory_xact_lock(hashtext('relay:'||$1))`), `CountQueued`,
@@ -373,7 +373,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - `InsertAttempt`
   - `ReapStaleSending`, `PickStaleQueued`, `TouchQueued`
   - follow the guards in the data-model.md "Write paths" table
-- [ ] T048 [US1] Implement `internal/adapters/postgres/notification_repo.go` (`NotificationRepository`):
+- [X] T048 [US1] Implement `internal/adapters/postgres/notification_repo.go` (`NotificationRepository`):
   - `Create` (on conflict: re-select and compare `data-model.md notifications.payload_hash`)
   - `RelayTx(ctx, channel, fn)`: one tx with lock → count → pick → mark queued → callback publish
     → commit/rollback
@@ -383,21 +383,21 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
     1 KB; sets `data-model.md notifications.sent_at`/`failed_at`
   - the reaper methods
   - makes T041 pass
-- [ ] T049 [US1] Implement `internal/app/create.go` (`CreateNotification`):
+- [X] T049 [US1] Implement `internal/app/create.go` (`CreateNotification`):
   - validate via the domain
   - build the aggregate with `IDGenerator`/`Clock`
   - persist the correlation id (`data-model.md notifications.correlation_id`)
   - resolve idempotency (R7)
   - broadcast a status event after commit
   - makes T037 pass
-- [ ] T050 [US1] Implement the `createNotification` handler in
+- [X] T050 [US1] Implement the `createNotification` handler in
   `internal/adapters/http/notifications.go`: map request ↔ domain, merge the `Idempotency-Key`
   header with the body field (mismatch → 400), set the `Idempotent-Replayed` header, return 202.
   Makes T042 pass.
-- [ ] T051 [P] [US1] Implement `internal/adapters/rabbitmq/topology.go`: idempotent declaration
+- [X] T051 [P] [US1] Implement `internal/adapters/rabbitmq/topology.go`: idempotent declaration
   of the exchanges, queues (`x-max-priority=3`, DLX) and bindings exactly as in
   `contracts/events.md` §1.
-- [ ] T052 [US1] Implement the confirm publisher in `internal/adapters/rabbitmq/publisher.go`
+- [X] T052 [US1] Implement the confirm publisher in `internal/adapters/rabbitmq/publisher.go`
   (`ports.Publisher`):
   - persistent, priority (from `data-model.md notifications.priority`), `message_id`,
     `mandatory`
@@ -405,25 +405,25 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - waits for all deferred confirms with a ctx timeout
   - a returned or nacked message is an error
   - reconnects on channel close
-- [ ] T053 [US1] Implement the consumer in `internal/adapters/rabbitmq/consumer.go`:
+- [X] T053 [US1] Implement the consumer in `internal/adapters/rabbitmq/consumer.go`:
   - per channel queue, `Qos(prefetch=CONSUMER_CONCURRENCY_PER_CHANNEL)`, N handler goroutines
   - decode the body; a poison message → `Nack(requeue=false)`
   - put the correlation id from the header into ctx
   - ack or nack according to the handler's result
   - stops consuming on ctx cancel and waits for in-flight handlers (R17)
-- [ ] T054 [US1] Implement `internal/app/relay.go` (`RelayDue` tick): for each channel run
+- [X] T054 [US1] Implement `internal/app/relay.go` (`RelayDue` tick): for each channel run
   `RelayTx` with the backpressure quota from R4, publish via the `Publisher` port, broadcast
   `queued` events, increment `relay_published_total`/`relay_backpressure_skips_total`. Every per-row log line
   carries that row's `correlation_id`; tick-level lines carry a generated `tick_id`. Makes T039
   pass.
-- [ ] T055 [US1] Implement the provider client in `internal/adapters/provider/client.go`
+- [X] T055 [US1] Implement the provider client in `internal/adapters/provider/client.go`
   (`ports.Provider`):
   - POST `{to, channel, content}` with the `Idempotency-Key` and `X-Correlation-ID` headers
   - `PROVIDER_TIMEOUT`, no redirects, read at most 64 KiB
   - parse `messageId`; parse Retry-After
   - classify with `domain.Classify` (`contracts/provider.md`)
   - `provider_request_duration_seconds` histogram
-- [ ] T056 [US1] Implement `internal/app/deliver.go` (`Deliver` pipeline, R6):
+- [X] T056 [US1] Implement `internal/app/deliver.go` (`Deliver` pipeline, R6):
   - breaker check (port)
   - limiter permit (port; errors retried with backoff, fail closed). If no permit is obtained
     within `LIMITER_MAX_WAIT` (default 30 s), return a release result so the consumer does
@@ -436,15 +436,15 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - returns ack / dead-letter to the consumer
   - broadcasts transitions
   - makes T038 pass
-- [ ] T057 [US1] Implement `internal/app/reaper.go` (`ReapStale` tick, R5): reap stale `sending`
+- [X] T057 [US1] Implement `internal/app/reaper.go` (`ReapStale` tick, R5): reap stale `sending`
   (an `abandoned` attempt via `data-model.md notification_attempts.outcome`) and republish stale
   `queued` via the `Publisher` port. Increment `reaper_recovered_total`. Makes T040 pass.
-- [ ] T058 [P] [US1] Implement the mock provider in `tools/mockprovider/main.go`:
+- [X] T058 [P] [US1] Implement the mock provider in `tools/mockprovider/main.go`:
   - `POST /send`, `PUT /control` (optionally scoped per channel), `GET /received`,
     `DELETE /received`, the env defaults and the per-request headers, all per
     `contracts/provider.md`
   - add the `mockprovider` service to `docker-compose.yml`
-- [ ] T059 [US1] Wire the worker in `cmd/worker/main.go`:
+- [X] T059 [US1] Wire the worker in `cmd/worker/main.go`:
   - AMQP connection + topology
   - the relay ticker (`RELAY_INTERVAL`)
   - a consumer per channel calling `Deliver`
@@ -452,7 +452,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - noop limiter/breaker/broadcaster (T024)
   - worker readiness: postgres + rabbitmq
   - makes T043–T045 pass
-- [ ] T060 [US1] Wire the create endpoint into `cmd/api/main.go` with `IDGenerator`, `Clock`,
+- [X] T060 [US1] Wire the create endpoint into `cmd/api/main.go` with `IDGenerator`, `Clock`,
   `MAX_ATTEMPTS` and the noop broadcaster. Verify quickstart scenarios #1–#5 manually.
 
 **Checkpoint**: MVP. A notification can be created, delivered, retried and failed, and survives a
@@ -470,9 +470,9 @@ batch lookup (US2-AS3) is delivered with US4 in T076.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T061 [P] [US2] Write unit tests for the get use case in `internal/app/query_test.go`:
+- [X] T061 [P] [US2] Write unit tests for the get use case in `internal/app/query_test.go`:
   found, with attempts ordered by `attempt_no`; not found → `ErrNotFound`.
-- [ ] T062 [P] [US2] Write the integration test in `test/integration/api_get_test.go`:
+- [X] T062 [P] [US2] Write the integration test in `test/integration/api_get_test.go`:
   - 503 then 202 → GET shows 2 attempts, `http_status` and `error` on the first, the provider
     message id and the sent/created/updated timestamps
   - unknown id → 404 `not_found`
@@ -480,12 +480,12 @@ batch lookup (US2-AS3) is delivered with US4 in T076.
 
 ### Implementation for User Story 2
 
-- [ ] T063 [US2] Add `GetNotification` and `ListAttempts` (`ORDER BY attempt_no`) to
+- [X] T063 [US2] Add `GetNotification` and `ListAttempts` (`ORDER BY attempt_no`) to
   `sql/queries/notifications.sql`, run `make gen`, and implement them in
   `internal/adapters/postgres/notification_repo.go`.
-- [ ] T064 [US2] Implement `GetNotification` in `internal/app/query.go`, returning the aggregate
+- [X] T064 [US2] Implement `GetNotification` in `internal/app/query.go`, returning the aggregate
   plus its attempts. Makes T061 pass.
-- [ ] T065 [US2] Implement the `getNotification` handler in
+- [X] T065 [US2] Implement the `getNotification` handler in
   `internal/adapters/http/notifications.go`, mapping to the `NotificationDetail` schema. Makes
   T062 pass.
 
@@ -504,7 +504,7 @@ items not early (quickstart #11).
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T066 [P] [US3] Write the rate-limit integration test in `test/integration/ratelimit_test.go`
+- [X] T066 [P] [US3] Write the rate-limit integration test in `test/integration/ratelimit_test.go`
   (real Redis):
   - 2 limiter instances at 20/s for 3 s → at most 20 permits in any sliding 1 s window
   - per-channel keys are independent
@@ -514,7 +514,7 @@ items not early (quickstart #11).
   - Redis stopped with `LIMITER_MAX_WAIT=2s` → the consumer `Nack(requeue=true)`s the message, the
     row stays `queued`, and it's delivered once Redis is back
   - also an end-to-end run through 2 worker instances checking the mock's timestamps (SC-003)
-- [ ] T067 [P] [US3] Write the priority and scheduling integration tests in
+- [X] T067 [P] [US3] Write the priority and scheduling integration tests in
   `test/integration/priority_schedule_test.go`:
   - a backlog of 300 low SMS, then 1 high → the high item is within the first
     `concurrency × workers + RELAY_BATCH_SIZE` sends (R10)
@@ -524,7 +524,7 @@ items not early (quickstart #11).
 
 ### Implementation for User Story 3
 
-- [ ] T068 [US3] Implement the GCRA limiter:
+- [X] T068 [US3] Implement the GCRA limiter:
   - the Lua script in `internal/adapters/redis/gcra.lua`, embedded
   - `internal/adapters/redis/ratelimiter.go` (`ports.RateLimiter`)
   - key `ratelimit:{channel}`, emission interval `1s / RATE_LIMIT_PER_SECOND`, zero burst, Redis
@@ -532,11 +532,11 @@ items not early (quickstart #11).
   - `Acquire(ctx, channel)` loops on the returned wait with ctx
   - `rate_limiter_wait_seconds` histogram
   - (R8) makes the first part of T066 pass
-- [ ] T069 [US3] Wire the Redis client and limiter into `cmd/worker/main.go`, replacing the noop
+- [X] T069 [US3] Wire the Redis client and limiter into `cmd/worker/main.go`, replacing the noop
   limiter; add Redis to worker readiness. Add a `demo-burst` script in `scripts/demo-burst.sh`
   (5,000 mixed-priority SMS via the batch endpoint, falling back to single creates) referenced by
   the Makefile. Makes T066 and T067 pass.
-- [ ] T070 [P] [US3] Write `specs/adr/0004-redis-gcra-rate-limiter.md` from R8: why a token
+- [X] T070 [P] [US3] Write `specs/adr/0004-redis-gcra-rate-limiter.md` from R8: why a token
   bucket violates SC-003, the fail-closed choice, and the alternatives.
 
 **Checkpoint**: all P1 stories are done; burst behaviour is demonstrable.
@@ -668,8 +668,17 @@ filters applied; `limit=101` or a bad cursor → 400 (quickstart #10).
 
 ## Phase 9: User Story 7 - Operate and monitor the system (Priority: P2)
 
-**Goal**: a per-channel circuit breaker that doesn't consume attempts, the full metric set,
-end-to-end correlation ids, real readiness, and verified graceful shutdown.
+**Goal**: a per-channel circuit breaker that doesn't consume attempts, capped by
+`BREAKER_MAX_DEFER_AGE` (analysis finding D1), the full metric set, end-to-end correlation ids,
+real readiness, and verified graceful shutdown.
+
+**Tracked from /speckit-analyze, finding D1 (Constitution III: every retry has a cap)**: breaker
+deferrals don't use attempts, so without a cap a provider that never recovers would keep
+notifications non-terminal forever. Past `BREAKER_MAX_DEFER_AGE` (default 1 h, measured from
+`max(created_at, scheduled_at)`) a deferral ends `failed` with `last_error=provider_unavailable`
+and goes to the DLQ. Unit test T087, integration test T088, implementation T093. The Phase 9
+checkpoint isn't met without all three. The deferral path from T056 (`deliverer.deferClaimed`)
+has no age check yet.
 
 **Independent Test**: fail SMS at the mock during a burst. The breaker opens, SMS attempts stop
 growing, email/push keep flowing, and SMS recovers after the cool-down. The metrics, the
@@ -718,7 +727,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - `IsSuccessful` returns true for success and permanent outcomes
   - expose `State()` and the remaining cool-down; update the `circuit_breaker_state` gauge on
     state change (R9)
-- [ ] T093 [US7] Implement the breaker-open deferral in `internal/app/deliver.go`:
+- [ ] T093 [US7] (analysis finding D1) Implement the breaker-open deferral in `internal/app/deliver.go`:
   `queued → sending → retrying` in one tx via `DeferSending`, without incrementing
   `data-model.md notifications.attempts`. `ErrOpenState`/`ErrTooManyRequests` take the same path.
   Past `BREAKER_MAX_DEFER_AGE`, `DeferSending` instead moves `sending → failed`, setting
@@ -752,7 +761,9 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
 - [ ] T097 [P] [US7] Write `specs/adr/0005-retry-backoff-and-circuit-breaker.md` from R9,
   including the per-process breaker trade-off.
 
-**Checkpoint**: all required stories (US1–US7) are done.
+**Checkpoint**: all required stories (US1–US7) are done, including the `BREAKER_MAX_DEFER_AGE`
+cap (finding D1): a deferral older than the cap ends `failed` (`provider_unavailable`) and in the
+DLQ, verified by T087 and T088.
 
 ---
 
@@ -763,6 +774,8 @@ any bonus work.
 
 - [ ] T098 Write `README.md`:
   - setup (`docker compose up`)
+  - a "Bugs caught by tests" section from `specs/001-notification-engine/readme-backlog.md`
+    (starting with the FOR UPDATE claim fix in `be59a7b`); delete the backlog file once moved
   - an architecture diagram (Mermaid, from the plan's pipeline)
   - design decisions linking ADRs 0001–0008, plus a note on the one-shot migrate service (R14)
   - trade-offs: the at-least-once window, the per-process breaker, the priority prefetch bound,

@@ -73,10 +73,17 @@ implementation (Constitution I).
   - `SKIP LOCKED` makes several worker replicas safe.
   - Publishing *inside* the transaction closes a race the input flow had: a consumer could receive
     a message while the row was still `pending`, skip it, and the row would then be committed as
-    `queued` with no message left. The consumer's guarded `UPDATE … WHERE status='queued'` waits
-    on the relay's row lock and re-checks the condition after commit (Postgres EvalPlanQual), so
-    it either sees `queued` or, after a rollback, sees `pending` and drops the message; the relay
-    then publishes it again.
+    `queued` with no message left. The consumer claims in two steps in one transaction: first
+    `SELECT … WHERE id=$1 FOR UPDATE` (no status predicate), then the guarded
+    `UPDATE … WHERE status='queued'`. The locking read waits for the relay's row lock and returns
+    the newest committed version, so the consumer sees either `queued` or, after a rollback,
+    `pending` (drop; the relay publishes it again).
+  - **Correction (found by the T043 integration tests)**: an earlier version of this entry said the
+    guarded UPDATE alone would wait and re-check (EvalPlanQual). It doesn't. Under READ COMMITTED
+    an UPDATE picks its candidate rows from its snapshot, where the row is still `pending`, so it
+    matched 0 rows without waiting, and the message was dropped whenever it overtook the commit.
+    The locking read is what makes the wait happen; `TestRepoClaimWaitsForAnOpenRelayTransaction`
+    guards it.
   - A crash between publish and commit leaves the row due again, so it gets republished. The
     duplicate message is harmless because of the consumer guard (R7).
 - **Cost**: row locks are held for one publish+confirm round-trip per tick (a few milliseconds for
@@ -215,6 +222,29 @@ implementation (Constitution I).
 - **Alternatives**: a sliding-window log (more memory, more Redis work); a token bucket with a small
   burst (still exceeds the strict window); dividing the limit statically per worker (breaks when
   replica count changes).
+- **Amendment (implementation of T068/T069, measured on the compose stack)**:
+  - **Slot reservation**: the script *reserves* the next slot (TAT += T) and returns how long to
+    wait, so the caller sleeps until its own slot. That's one round trip per permit, with no
+    thundering herd of retries. A slot further away than the caller's deadline isn't reserved.
+  - **Permits ≠ provider calls**: slots were exactly T apart, but on the real stack a sliding
+    second *at the provider* peaked at **106**. The permit comes before the claim (R6, so throttled
+    items stay cancellable), and the claim's latency varies by tens of ms, so calls bunched. Fix:
+    `Acquire` returns the slot time and the deliverer starts the provider call at
+    `slot + RATE_LIMIT_SEND_OFFSET` (default 50 ms). If the claim overran the offset, it reserves a
+    fresh slot instead of sending early; if none comes within the maximum wait, the claimed row
+    goes back to `retrying` without an attempt. Peak dropped to 101–103.
+  - **Connection pool**: the provider client keeps 256 idle connections per host. The default
+    of 2 made most calls dial, adding variable latency between slot and arrival.
+  - **Headroom** (`RATE_LIMIT_HEADROOM`, default 0.05): slots are spaced `T × 1.05`, about
+    95/s at a limit of 100. Even then, millisecond CPU and network jitter on a loaded host left 1–3
+    extra arrivals per second, because a 10 ms slot leaves no room for jitter. With 5% headroom it
+    would take about 50 ms of jitter to exceed the limit. Measured peak: **96–98**. Sustained rate
+    stays inside SC-003's 90–100 band. `0` restores exact spacing.
+  - **Fail-open race (bug, fixed)**: right after a deadline passes, `ctx.Err()` can still be nil
+    for a moment. `Acquire` returned `(zero, nil)` there, so a notification could be sent
+    *without a permit* while Redis was down (seen 1 in 10 runs of the outage test). The limiter now
+    returns `DeadlineExceeded` explicitly, and the deliverer rejects a zero slot (defence in
+    depth). A deterministic unit test models the race.
 
 ## R9. Retry, backoff and circuit breaker **(ADR: retry-and-circuit-breaker)**
 
@@ -405,6 +435,8 @@ implementation (Constitution I).
 | `PROVIDER_URL` | `http://mockprovider:8090/send` | worker |
 | `PROVIDER_TIMEOUT` | `5s` | worker |
 | `RATE_LIMIT_PER_SECOND` | `100` | worker |
+| `RATE_LIMIT_SEND_OFFSET` | `50ms` | worker |
+| `RATE_LIMIT_HEADROOM` | `0.05` | worker |
 | `MAX_ATTEMPTS` | `5` | api (stamped per row) |
 | `BACKOFF_BASE` / `BACKOFF_MAX` | `1s` / `5m` | worker |
 | `BREAKER_CONSECUTIVE_FAILURES` / `BREAKER_COOLDOWN` | `5` / `30s` | worker |

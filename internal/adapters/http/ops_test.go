@@ -15,7 +15,7 @@ import (
 )
 
 func opsRouter(checker *health.Checker) http.Handler {
-	r := NewRouter(quiet, NewServer(quiet, checker))
+	r := NewRouter(quiet, NewServer(Deps{Log: quiet, Health: checker}))
 	reg := metrics.NewRegistry()
 	metrics.NewAPI(reg)
 	MountOps(r, reg, api.Spec)

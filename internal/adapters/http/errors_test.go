@@ -69,7 +69,7 @@ func TestInternalErrorsAreLoggedNotLeaked(t *testing.T) {
 }
 
 func TestRequestErrorsThroughRouter(t *testing.T) {
-	h := NewRouter(quiet, NewServer(quiet, health.New(0)))
+	h := NewRouter(quiet, NewServer(Deps{Log: quiet, Health: health.New(0)}))
 	tests := []struct {
 		name, method, path, body string
 		wantField                string

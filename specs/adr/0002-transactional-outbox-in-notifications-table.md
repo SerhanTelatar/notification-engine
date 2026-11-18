@@ -34,10 +34,15 @@ of legitimately waiting messages.
   4. marks the picked rows `queued` with a guarded update
   5. publishes each message with publisher confirms and `mandatory=true`
   6. commits, or rolls back if any publish is nacked, returned or times out
-- **The consumer's first DB step** is the guarded `UPDATE … SET status='sending' WHERE id=$1 AND
-  status='queued'`. If the relay hasn't committed yet, this update waits on the relay's row lock,
-  then re-checks the condition after commit (Postgres EvalPlanQual). It therefore sees either
-  `queued` (proceed) or, after a rollback, `pending` (drop; the relay will publish again).
+- **The consumer claims in one transaction with two statements**: `SELECT … WHERE id=$1 FOR
+  UPDATE`, then the guarded `UPDATE … SET status='sending' WHERE id=$1 AND status='queued'`. If
+  the relay hasn't committed yet, the locking read waits on the relay's row lock and then returns
+  the newest committed version. The consumer therefore sees either `queued` (proceed) or, after a
+  rollback, `pending` (drop; the relay will publish again).
+- **Why not just the guarded UPDATE**: under READ COMMITTED an UPDATE picks its candidates from its
+  snapshot. While the relay transaction is open the row is still `pending` there, so the UPDATE
+  matches 0 rows *without waiting* and the message is dropped. The integration tests caught this
+  (T043); `TestRepoClaimWaitsForAnOpenRelayTransaction` now guards the behaviour.
 - `RELAY_MAX_INFLIGHT_PER_CHANNEL` defaults to 1000. With the advisory lock, the cap holds exactly
   even with several worker replicas.
 

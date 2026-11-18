@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/http/gen"
+	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
 )
 
@@ -30,17 +31,28 @@ const (
 // maps it to 501, which isn't a declared response in api/openapi.yaml.
 var errNotImplemented = errors.New("operation not implemented yet")
 
+// Deps are the use cases and services behind the API. A nil use case means its operation
+// returns 501 until its user story lands.
+type Deps struct {
+	Log     *slog.Logger
+	Health  *health.Checker
+	Creator *app.Creator
+	Query   *app.Query
+}
+
 // Server implements gen.StrictServerInterface. Operations not built yet return errNotImplemented.
 type Server struct {
 	log    *slog.Logger
 	health *health.Checker
+	create *app.Creator
+	query  *app.Query
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
-// NewServer returns the strict-server implementation. checker backs /readyz.
-func NewServer(log *slog.Logger, checker *health.Checker) *Server {
-	return &Server{log: log, health: checker}
+// NewServer returns the strict-server implementation.
+func NewServer(d Deps) *Server {
+	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query}
 }
 
 // NewRouter mounts the generated routes on chi.
@@ -72,15 +84,7 @@ func NewHTTPServer(addr string, h http.Handler) *http.Server {
 
 // --- Operations: each returns errNotImplemented until its user story lands. ---
 
-func (s *Server) CreateNotification(context.Context, gen.CreateNotificationRequestObject) (gen.CreateNotificationResponseObject, error) {
-	return nil, errNotImplemented
-}
-
 func (s *Server) ListNotifications(context.Context, gen.ListNotificationsRequestObject) (gen.ListNotificationsResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) GetNotification(context.Context, gen.GetNotificationRequestObject) (gen.GetNotificationResponseObject, error) {
 	return nil, errNotImplemented
 }
 
