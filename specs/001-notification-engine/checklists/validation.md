@@ -161,3 +161,41 @@ key.
   so.
 - Scenarios #16–#18 (templates, WebSocket, metrics summary) belong to the bonus stories and weren't
   run.
+
+---
+
+# Full validation with the bonus features (T119)
+
+All of quickstart #1–#18 was rerun on `main` after the bonus PRs (#4–#8) were merged.
+
+**Stack**: `docker compose --profile observability up --build`, which adds Prometheus, Grafana and Jaeger, with `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318`, so tracing was on throughout.
+- Part A ran with one worker.
+- Part B (#11–#13, #15) ran with `--scale worker=2`.
+- Date: 2026-11-18.
+
+| # | Scenario | Result | Evidence |
+|---|----------|--------|----------|
+| 1 | Create + deliver | ✅ | `sent` after 2 s, `attempts: 1`, `provider_message_id: mock-1` |
+| 2 | Validation | ✅ | 400 `validation_failed` on `recipient` and `content` together |
+| 3 | Idempotency | ✅ | Same id with `Idempotent-Replayed: true`, then 409 for a different payload; one provider call |
+| 4 | Transient retry → failed | ✅ | `failed` after 11 s: 5 `transient` attempts, gaps 0.8 / 0.4 / 3.21 / 5.81 s; message in the DLQ |
+| 5 | Permanent failure | ✅ | `failed`, `attempts: 1` (on email, since #4 opens the SMS breaker) |
+| 6 | Batch partial | ✅ | 7 accepted, 3 rejected (indexes 7–9); batch total 7, all `sent` |
+| 7 | Batch limits | ✅ | 1,001 items → 400; all-invalid → 400; the batch count didn't change |
+| 8 | Cancel | ✅ | 200 `cancelled` twice; the provider never received it |
+| 9 | Cancel 409 | ✅ | 409 `not_cancellable`, `current_status: sent` |
+| 10 | List | ✅ | 3 pages, 5 items, newest first, no repeats; `limit=101` → 400 |
+| 11 | Burst + rate limit, 2 workers | ✅ | 5,000 SMS at **94.9/s**, peak **97** in any sliding second (limit 100); strict priority order (high at 0–499, normal at 500–1999, low at 2000–4999); both workers' relays published (4,247 and 772) |
+| 12 | Isolation + breaker | ✅ | Email and push (600) all sent in 5 s while SMS returned 503; `circuit_breaker_state{sms}=2` on both workers; SMS attempts frozen at 12 over 10 s; all 600 SMS sent 22 s after clearing the control |
+| 13 | Crash safety | ✅ | Killed at pending 389 / queued 999 / sending 7 / sent 605; all 2,000 `sent` after 122 s; `reaper_recovered_total{sending}=7`; one duplicate provider call (the documented at-least-once window, ADR 0003) |
+| 14 | Correlation | ✅ | The api lines (`notification accepted`, `http request`) and the worker line (`notification sent`) all carry `demo-14`; no recipient or content in any log line |
+| 15 | Readiness with RabbitMQ stopped | ✅ | Worker `/readyz` 503 (`rabbitmq: unavailable`), `/healthz` 200, workers stayed up; API ready and accepting (`pending`); worker ready again 12 s after the broker started, and the outage notification was then `sent` |
+| 16 | Templates | ✅ | The provider received `Hi Ada, your code is 1234`; sending without `Code` → 400 naming `variables.Code` |
+| 17 | Real-time | ✅ | `snapshot` (`scheduled`), then `queued` → `sending` → `sent`, each 3–38 ms after its commit (SC-010: ≤ 1 s) |
+| 18 | Metrics | ✅ | Summary: SMS `sent 12, failed 1, retried 4, success_rate 0.71`, e2e p95 290 ms, provider p95 31 ms; email `failed 1` (from #5); the backlog was empty, matching the `notification_backlog` gauges |
+
+**Bonus observability checked in the same run**:
+- **Jaeger**: 6 complete traces with `POST /api/v1/notifications` → `publish notifications.sms` → `deliver sms` → `provider send`, spanning `notification-engine-api` and `notification-engine-worker`.
+- **Prometheus and Grafana** (checked during T118 with 2 workers): 3 targets up, the datasource health check OK, and every dashboard panel query returning series.
+
+No new gaps were found.

@@ -25,6 +25,8 @@ docker compose --profile observability up   # + prometheus, grafana, jaeger (bon
 | http://localhost:8080/readyz · http://localhost:9090/readyz | API / worker readiness (with several workers: `docker compose port --index N worker 9090`) |
 | http://localhost:15672 (guest/guest) | RabbitMQ UI |
 | http://localhost:3000 | Grafana (observability profile) |
+| http://localhost:9190 | Prometheus (observability profile; 9090–9099 belong to the workers) |
+| http://localhost:16686 | Jaeger (observability profile; set `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318` in `.env`) |
 
 To use webhook.site as the provider in a demo, set `PROVIDER_URL=https://webhook.site/<uuid>` in
 `.env` and restart the worker.
