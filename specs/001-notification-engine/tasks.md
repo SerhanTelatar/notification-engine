@@ -331,7 +331,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - `Idempotency-Key` header replay returns `Idempotent-Replayed: true`
   - header and body keys that differ → 400
   - different payload with the same key → 409
-- [ ] T043 [P] [US1] Write the delivery and retry integration tests in
+- [X] T043 [P] [US1] Write the delivery and retry integration tests in
   `test/integration/delivery_test.go`:
   - create → `sent`, with 1 provider call that carries the `Idempotency-Key` header
   - 503 then 202 → `sent` with 2 attempts
