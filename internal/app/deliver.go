@@ -38,7 +38,12 @@ type DelivererDeps struct {
 	// SendOffset (RATE_LIMIT_SEND_OFFSET) delays every provider call to its reserved slot plus this
 	// constant, so variable claim latency can't bunch calls together; it should cover a normal
 	// claim. 0 sends as soon as the claim commits.
-	SendOffset  time.Duration
+	SendOffset time.Duration
+	// MaxDeferAge (BREAKER_MAX_DEFER_AGE) caps breaker deferrals, which use no attempts: once a
+	// notification has waited this long since max(created_at, scheduled_at), it fails as
+	// provider_unavailable instead of deferring again (analysis finding D1, Constitution III).
+	// 0 = no cap.
+	MaxDeferAge time.Duration
 	WorkTimeout time.Duration // 0 = DefaultWorkTimeout
 	Rand        func(n int64) int64
 }
@@ -269,7 +274,17 @@ func (dl *Deliverer) deferClaimed(ctx context.Context, log *slog.Logger, n *doma
 	if errors.As(openErr, &boe) && boe.RetryIn > 0 {
 		retryIn = boe.RetryIn
 	}
+	if d.MaxDeferAge > 0 && now.Sub(n.DeliveryReference()) > d.MaxDeferAge {
+		return dl.failUnavailable(ctx, log, n, now)
+	}
 	next := now.Add(retryIn + time.Duration(d.Rand(int64(retryIn/4)+1))) // jitter spreads the trial wave
+	if d.MaxDeferAge > 0 {
+		// Come back no later than the cap, so it's enforced on time rather than up to a whole
+		// cool-down late.
+		if capAt := n.DeliveryReference().Add(d.MaxDeferAge + time.Millisecond); next.After(capAt) {
+			next = capAt
+		}
+	}
 	if err := d.Repo.DeferSending(ctx, ports.Deferral{NotificationID: n.ID, NextAttemptAt: next, At: now}); err != nil {
 		log.ErrorContext(ctx, "deferral failed; the reaper will recover the row", "error", err)
 		return ports.DecisionAck
@@ -279,4 +294,22 @@ func (dl *Deliverer) deferClaimed(ctx context.Context, log *slog.Logger, n *doma
 	log.InfoContext(ctx, "circuit open, delivery deferred without using an attempt", "next_attempt_at", next)
 	broadcast(ctx, log, d.Events, n, statusPtr(domain.StatusSending), now)
 	return ports.DecisionAck
+}
+
+// failUnavailable ends a deferral that has waited longer than MaxDeferAge: sending → failed with
+// last_error=provider_unavailable, no attempt consumed, and the message is dead-lettered.
+func (dl *Deliverer) failUnavailable(ctx context.Context, log *slog.Logger, n *domain.Notification, now time.Time) ports.Decision {
+	d := dl.d
+	reason := ports.ReasonProviderUnavailable
+	if err := d.Repo.DeferSending(ctx, ports.Deferral{NotificationID: n.ID, Fail: true, LastError: &reason, At: now}); err != nil {
+		log.ErrorContext(ctx, "failing an over-age deferral failed; the reaper will recover the row", "error", err)
+		return ports.DecisionAck
+	}
+	d.Metrics.DeadLettered(n.Channel, reason)
+	failedAt := now
+	n.Status, n.LastError, n.UpdatedAt, n.FailedAt = domain.StatusFailed, &reason, now, &failedAt
+	log.ErrorContext(ctx, "provider unavailable for longer than the maximum deferral age, notification failed",
+		"waited", now.Sub(n.DeliveryReference()).Round(time.Second).String(), "max_defer_age", d.MaxDeferAge.String())
+	broadcast(ctx, log, d.Events, n, statusPtr(domain.StatusSending), now)
+	return ports.DecisionDeadLetter
 }

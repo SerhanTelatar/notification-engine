@@ -78,10 +78,11 @@ On `docker compose up` (8 CPUs shared by every service and the load generator):
 - Losing Redis state at most allows a burst of one slot right after a restart. While Redis is
   down nothing is sent; messages wait in `queued` and resume when Redis returns (tested through a
   TCP proxy outage).
-- **Environment note**: on a single laptop, delivery drops to about 55–65/s *while* a heavy
-  ingestion burst competes for the same CPUs (50 concurrent `curl` processes, API, Postgres,
-  RabbitMQ and the worker), and recovers to 95–96/s the moment ingestion stops. That's a host
-  resource limit, not a limiter one. In production the API and workers run on separate hosts, and
-  `CONSUMER_CONCURRENCY_PER_CHANNEL` can be raised.
+- **Environment note**: with single creates from 50 concurrent `curl` processes, delivery
+  dropped to about 55–65/s *while* the requests were arriving and recovered to 95–96/s once they
+  stopped. The load generator was competing for the same 8 CPUs. With the batch endpoint as the
+  ingestion path (`scripts/demo-burst.sh`, 1,000 items per request), 3,000 SMS are accepted in
+  under a second and delivered at a steady 95/s from start to finish, with a peak of 97 at the
+  provider.
 - A fail-open race (`ctx.Err()` still nil just after the deadline) was found by the outage
   integration test and fixed. It's recorded in the README's "Bugs caught by tests" backlog.

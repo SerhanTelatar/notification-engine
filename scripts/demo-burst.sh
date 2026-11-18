@@ -2,27 +2,34 @@
 # Burst demo (quickstart #11): submit BURST mixed-priority SMS against the running stack, then show
 # how the provider saw them: per-second rate (<= RATE_LIMIT_PER_SECOND) and priority order.
 #
-# Until the batch endpoint lands (US4) this uses concurrent single creates.
+# Submits through the batch endpoint, 1,000 items per request.
 # Usage: scripts/demo-burst.sh [BURST]   env: API_URL (http://localhost:8080), MOCK_URL (http://localhost:8090)
 set -euo pipefail
 
 BURST=${1:-5000}
 API_URL=${API_URL:-http://localhost:8080}
 MOCK_URL=${MOCK_URL:-http://localhost:8090}
-PARALLEL=${PARALLEL:-50}
 
 command -v python3 >/dev/null || { echo "python3 is required for the summary" >&2; exit 1; }
 curl -fsS "$API_URL/readyz" >/dev/null || { echo "API not ready at $API_URL (run: docker compose up -d)" >&2; exit 1; }
 curl -fsS -X DELETE "$MOCK_URL/received" >/dev/null
 
-echo "Submitting $BURST SMS (10% high, 30% normal, 60% low) with $PARALLEL parallel clients..."
+echo "Submitting $BURST SMS (10% high, 30% normal, 60% low) in batches of up to 1000..."
 start=$(date +%s)
-seq 1 "$BURST" | awk '{ p = ($1 % 10 == 0) ? "high" : (($1 % 10 <= 3) ? "normal" : "low"); print $1, p }' |
-  xargs -P "$PARALLEL" -n 2 sh -c '
-    curl -fsS -o /dev/null -X POST "$0/api/v1/notifications" \
-      -H "Content-Type: application/json" -H "X-Correlation-ID: burst-$1" \
-      -d "{\"recipient\":\"+905551234567\",\"channel\":\"sms\",\"content\":\"burst $1\",\"priority\":\"$2\"}"
-  ' "$API_URL"
+python3 - "$BURST" "$API_URL" <<'PY'
+import json, sys, urllib.request
+burst, api = int(sys.argv[1]), sys.argv[2]
+def prio(i): return "high" if i % 10 == 0 else ("normal" if i % 10 <= 3 else "low")
+for lo in range(1, burst + 1, 1000):
+    items = [{"recipient": "+905551234567", "channel": "sms", "content": f"burst {i}", "priority": prio(i)}
+             for i in range(lo, min(lo + 1000, burst + 1))]
+    req = urllib.request.Request(f"{api}/api/v1/notifications/batch", data=json.dumps({"items": items}).encode(),
+                                 headers={"Content-Type": "application/json", "X-Correlation-ID": f"burst-{lo}"})
+    with urllib.request.urlopen(req) as resp:
+        body = json.load(resp)
+    if body["rejected"]:
+        sys.exit(f"batch starting at {lo}: {body['rejected']} rejected")
+PY
 echo "Accepted $BURST in $(( $(date +%s) - start ))s. Waiting for delivery..."
 
 while :; do

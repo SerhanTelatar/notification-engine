@@ -135,3 +135,52 @@ SELECT * FROM notifications WHERE id = @id;
 
 -- name: ListAttempts :many
 SELECT * FROM notification_attempts WHERE notification_id = @notification_id ORDER BY attempt_no;
+
+-- ---------------------------------------------------------------------------------------------
+-- Cancellation (US5, FR-013/014/015). Same lock-then-guard pattern as the claim: LockForClaim
+-- waits for an open relay transaction, so the guard sees the committed status.
+-- ---------------------------------------------------------------------------------------------
+
+-- name: CancelNotification :one
+UPDATE notifications
+SET status = 'cancelled', cancelled_at = @now::timestamptz, updated_at = @now::timestamptz
+WHERE id = @id AND status IN ('pending', 'scheduled', 'queued', 'retrying')
+RETURNING *;
+
+-- name: LockBatchItems :many
+SELECT id, status FROM notifications WHERE batch_id = @batch_id ORDER BY id FOR UPDATE;
+
+-- name: CancelMany :many
+UPDATE notifications
+SET status = 'cancelled', cancelled_at = @now::timestamptz, updated_at = @now::timestamptz
+WHERE id = ANY(@ids::uuid[]) AND status IN ('pending', 'scheduled', 'queued', 'retrying')
+RETURNING *;
+
+-- ---------------------------------------------------------------------------------------------
+-- Listing (US6, FR-011): keyset pagination, newest first (research R13)
+-- ---------------------------------------------------------------------------------------------
+
+-- name: ListNotifications :many
+-- Optional filters are NULL when absent. The (created_at, id) row comparison continues strictly
+-- after the cursor, so rows inserted while a client pages can't shift later pages.
+SELECT * FROM notifications
+WHERE (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text)
+  AND (sqlc.narg(channel)::text IS NULL OR channel = sqlc.narg(channel)::text)
+  AND (sqlc.narg(from_ts)::timestamptz IS NULL OR created_at >= sqlc.narg(from_ts)::timestamptz)
+  AND (sqlc.narg(to_ts)::timestamptz IS NULL OR created_at < sqlc.narg(to_ts)::timestamptz)
+  AND (sqlc.narg(after_created_at)::timestamptz IS NULL
+       OR (created_at, id) < (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid))
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
+-- ---------------------------------------------------------------------------------------------
+-- Backlog gauge (US7, FR-031, research R16)
+-- ---------------------------------------------------------------------------------------------
+
+-- name: BacklogCounts :many
+-- Non-terminal rows only, which notifications_backlog_idx covers, so this is an index-only scan
+-- over the backlog rather than the whole table.
+SELECT channel, priority, status, count(*)::int AS n
+FROM notifications
+WHERE status NOT IN ('sent', 'failed', 'cancelled')
+GROUP BY channel, priority, status;

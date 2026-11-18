@@ -175,8 +175,20 @@ func (r *memRepo) List(context.Context, ports.ListFilter) ([]domain.Notification
 	return nil, errors.New("memRepo.List: not needed by these tests")
 }
 
-func (r *memRepo) Cancel(context.Context, string, time.Time) (*domain.Notification, bool, error) {
-	return nil, false, errors.New("memRepo.Cancel: not needed by these tests")
+func (r *memRepo) Cancel(_ context.Context, id string, at time.Time) (ports.CancelOutcome, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n, ok := r.rows[id]
+	if !ok {
+		return ports.CancelOutcome{}, domain.ErrNotFound
+	}
+	prev := n.Status
+	if !prev.In(domain.CancellableFrom) {
+		return ports.CancelOutcome{Notification: clone(n), Previous: prev}, nil
+	}
+	cancelledAt := at
+	n.Status, n.CancelledAt, n.UpdatedAt = domain.StatusCancelled, &cancelledAt, at
+	return ports.CancelOutcome{Notification: clone(n), Previous: prev, Changed: true}, nil
 }
 
 func (r *memRepo) RelayTx(ctx context.Context, ch domain.Channel, at time.Time, quota ports.QuotaFunc, publish ports.PublishFunc) (ports.RelayResult, error) {
@@ -500,8 +512,10 @@ func (b *recBroadcaster) statuses(id string) []domain.Status {
 // --- Metrics --------------------------------------------------------------------------------
 
 type recMetrics struct {
-	mu     sync.Mutex
-	counts map[string]int
+	mu      sync.Mutex
+	counts  map[string]int
+	backlog []ports.BacklogCount // last Backlog call
+	depths  map[string]int       // last QueueDepth per queue
 }
 
 func newMetrics() *recMetrics { return &recMetrics{counts: map[string]int{}} }
@@ -535,7 +549,20 @@ func (m *recMetrics) RelayPublished(ch domain.Channel, n int) {
 }
 func (m *recMetrics) RelaySkipped(ch domain.Channel) { m.inc("relay_skipped:"+string(ch), 1) }
 func (m *recMetrics) Reaped(kind string, n int)      { m.inc("reaped:"+kind, n) }
-func (m *recMetrics) Backlog([]ports.BacklogCount)   {}
+func (m *recMetrics) Backlog(c []ports.BacklogCount) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.backlog = append([]ports.BacklogCount(nil), c...)
+}
+
+func (m *recMetrics) QueueDepth(queue string, n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.depths == nil {
+		m.depths = map[string]int{}
+	}
+	m.depths[queue] = n
+}
 
 // --- Logs -----------------------------------------------------------------------------------
 

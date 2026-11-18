@@ -268,7 +268,9 @@ func TestRateLimitEndToEndTwoWorkers(t *testing.T) {
 	mock := testenv.NewMockProvider(t)
 	for range 2 { // two worker processes, each with its own Redis client
 		cfg := defaultPipeline(mock.SendURL())
-		cfg.limiter = redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), limit, 0)
+		// The shipped default headroom (RATE_LIMIT_HEADROOM=0.05, ADR 0004): with 0, a loaded
+		// runner (-race, packages in parallel) occasionally put 21 calls in a 1 s window.
+		cfg.limiter = redisadapter.NewRateLimiter(newRedisClient(t, env.RedisAddr), limit, 0.05)
 		cfg.limiterMaxWait = 10 * time.Second
 		cfg.sendOffset = 50 * time.Millisecond
 		startPipeline(t, cfg)

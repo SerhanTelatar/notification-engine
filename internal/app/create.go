@@ -51,21 +51,9 @@ func NewCreator(d CreatorDeps) *Creator { return &Creator{d: d} }
 
 // Create validates and stores one notification. Delivery happens asynchronously.
 func (c *Creator) Create(ctx context.Context, req CreateRequest) (CreateResult, error) {
-	if verr := domain.CheckContentSource(req.Content, req.TemplateID); verr != nil {
-		return CreateResult{}, verr
-	}
-	if req.TemplateID != nil {
-		// Templates arrive with US8; until then every template id is unknown (spec US8-AS4).
-		return CreateResult{}, domain.NewFieldError("template_id", "unknown template")
-	}
-
-	draft := domain.Draft{
-		Recipient: req.Recipient, Channel: req.Channel, Content: *req.Content, Priority: req.Priority,
-		ScheduledAt: req.ScheduledAt, IdempotencyKey: req.IdempotencyKey, CorrelationID: req.CorrelationID,
-	}
-	n, err := domain.NewNotification(draft, c.d.IDs.NewID(), c.d.Clock.Now(), c.d.MaxAttempts)
+	n, err := buildNotification(req, c.d.IDs.NewID(), c.d.Clock.Now(), c.d.MaxAttempts, nil)
 	if err != nil {
-		return CreateResult{}, err //nolint:wrapcheck // domain validation error, returned as is
+		return CreateResult{}, err
 	}
 
 	stored, created, err := c.d.Repo.Create(ctx, n)
@@ -85,4 +73,22 @@ func (c *Creator) Create(ctx context.Context, req CreateRequest) (CreateResult, 
 		"channel", stored.Channel, "priority", stored.Priority.String(), "status", stored.Status)
 	broadcast(ctx, c.d.Log, c.d.Events, stored, nil, stored.CreatedAt)
 	return CreateResult{Notification: stored}, nil
+}
+
+// buildNotification validates one request and builds its aggregate. Single creates and batch
+// items share it, so they validate identically. The error is a *domain.ValidationError.
+func buildNotification(req CreateRequest, id string, now time.Time, maxAttempts int, batchID *string) (*domain.Notification, error) {
+	if verr := domain.CheckContentSource(req.Content, req.TemplateID); verr != nil {
+		return nil, verr
+	}
+	if req.TemplateID != nil {
+		// Templates arrive with US8; until then every template id is unknown (spec US8-AS4).
+		return nil, domain.NewFieldError("template_id", "unknown template")
+	}
+	draft := domain.Draft{
+		Recipient: req.Recipient, Channel: req.Channel, Content: *req.Content, Priority: req.Priority,
+		ScheduledAt: req.ScheduledAt, IdempotencyKey: req.IdempotencyKey, CorrelationID: req.CorrelationID,
+		BatchID: batchID,
+	}
+	return domain.NewNotification(draft, id, now, maxAttempts) //nolint:wrapcheck // domain validation error
 }

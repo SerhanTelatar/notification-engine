@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -100,5 +101,23 @@ func TestFromReturnsAttachedLogger(t *testing.T) {
 	}
 	if CorrelationID(context.Background()) != "" {
 		t.Fatal("empty ctx has no correlation id")
+	}
+}
+
+// An id already on the logger (With) or the record isn't added again from ctx.
+func TestContextIDsAreNotDuplicated(t *testing.T) {
+	var buf bytes.Buffer
+	log := NewWithWriter(&buf, "worker", "info")
+	ctx := WithNotificationID(WithCorrelationID(context.Background(), "c-1"), "n-1")
+
+	log.With(FieldCorrelationID, "c-1").InfoContext(ctx, "with")
+	log.InfoContext(ctx, "record", FieldNotificationID, "n-1")
+	log.InfoContext(ctx, "plain")
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		for _, key := range []string{FieldCorrelationID, FieldNotificationID} {
+			if n := strings.Count(line, `"`+key+`":`); n != 1 {
+				t.Fatalf("%s appears %d times: %s", key, n, line)
+			}
+		}
 	}
 }

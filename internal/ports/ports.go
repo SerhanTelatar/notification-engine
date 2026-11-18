@@ -108,9 +108,10 @@ type NotificationRepository interface {
 	ListAttempts(ctx context.Context, id string) ([]domain.Attempt, error)
 	List(ctx context.Context, f ListFilter) ([]domain.Notification, error)
 
-	// Cancel moves a cancellable notification to cancelled. When nothing changed it returns the
-	// current row and changed=false.
-	Cancel(ctx context.Context, id string, at time.Time) (n *domain.Notification, changed bool, err error)
+	// Cancel moves a cancellable notification to cancelled. When nothing changed (already
+	// cancelled, or not cancellable) it returns the current row with Changed=false. An unknown id
+	// is domain.ErrNotFound.
+	Cancel(ctx context.Context, id string, at time.Time) (CancelOutcome, error)
 
 	// RelayTx runs one channel's relay pass in a single transaction (research R4): advisory lock,
 	// count queued, quota(queued) rows picked FOR UPDATE SKIP LOCKED, mark queued, publish, then
@@ -138,14 +139,42 @@ type BatchCancelResult struct {
 	Cancelled        int
 	AlreadyCancelled int
 	NotCancellable   int
+	Rows             []CancelOutcome // the notifications this call cancelled
+}
+
+// CancelOutcome is the result of cancelling one notification.
+type CancelOutcome struct {
+	Notification *domain.Notification
+	Previous     domain.Status // status before the call
+	Changed      bool
+}
+
+// BatchItemKind is what happened to one batch item in the database.
+type BatchItemKind int
+
+const (
+	// BatchItemCreated: a new notification in this batch.
+	BatchItemCreated BatchItemKind = iota
+	// BatchItemReplayed: the idempotency key already existed with the same payload; Stored is the
+	// original notification.
+	BatchItemReplayed
+	// BatchItemConflict: the idempotency key already existed with a different payload; the item is
+	// rejected and Stored is the existing notification.
+	BatchItemConflict
+)
+
+// BatchItemOutcome pairs an item with its stored notification.
+type BatchItemOutcome struct {
+	Kind   BatchItemKind
+	Stored *domain.Notification
 }
 
 // BatchRepository persists batches and their notifications.
 type BatchRepository interface {
-	// CreateBatch inserts the batch and its accepted items in one transaction. For each item it
-	// returns the stored row and whether it was newly created (idempotent items may resolve to
-	// existing rows).
-	CreateBatch(ctx context.Context, b domain.Batch, items []*domain.Notification) (stored []*domain.Notification, created []bool, err error)
+	// CreateBatch writes the batch row and its items in one transaction and returns one outcome
+	// per item, in order. b.TotalRejected carries the items the caller already rejected;
+	// conflicts are added to it, and created plus replayed items become TotalAccepted.
+	CreateBatch(ctx context.Context, b domain.Batch, items []*domain.Notification) ([]BatchItemOutcome, error)
 	GetBatch(ctx context.Context, id string) (*domain.Batch, BatchCounts, []domain.Notification, error)
 	CancelBatch(ctx context.Context, id string, at time.Time) (BatchCancelResult, error)
 }
@@ -303,4 +332,10 @@ type MetricsRecorder interface {
 	RelaySkipped(ch domain.Channel)
 	Reaped(kind string, n int)
 	Backlog(counts []BacklogCount)
+	QueueDepth(queue string, n int)
+}
+
+// QueueInspector reports broker-side queue depths (a secondary signal next to the DB backlog).
+type QueueInspector interface {
+	Depths(ctx context.Context) (map[string]int, error)
 }

@@ -372,3 +372,106 @@ func TestDeliverRefusesAPermitWithoutASlot(t *testing.T) {
 		t.Fatal("a permit without a slot must fail closed: no claim, no send")
 	}
 }
+
+func TestDeliverBreakerOpenDefersWithoutAnAttempt(t *testing.T) {
+	f := newDeliverFixture()
+	f.uc.d.MaxDeferAge = time.Hour
+	f.breaker.open, f.breaker.retryIn = true, 30*time.Second
+	msg := f.queue("n1", nil)
+
+	if d := f.uc.Handle(context.Background(), msg); d != ports.DecisionAck {
+		t.Fatalf("decision %s, want ack", d)
+	}
+	n := f.repo.get("n1")
+	if n.Status != domain.StatusRetrying || n.Attempts != 0 {
+		t.Fatalf("row %s attempts %d: an open breaker must defer without using an attempt (FR-024)", n.Status, n.Attempts)
+	}
+	if len(f.repo.attemptsOf("n1")) != 0 || f.provider.callCount() != 0 || f.limiter.callCount() != 0 {
+		t.Fatal("no attempt row, no provider call and no rate-limit permit for a deferral")
+	}
+	wait := n.NextAttemptAt.Sub(f.clock.Now())
+	if wait < 30*time.Second || wait > 30*time.Second*5/4 {
+		t.Fatalf("next attempt in %v, want the remaining cool-down (30s) plus at most 25%% jitter", wait)
+	}
+	if f.metrics.get("delivered:sms:deferred") != 1 {
+		t.Fatalf("metrics %v", f.metrics.counts)
+	}
+}
+
+func TestDeliverBreakerDeferralPastMaxAgeFails(t *testing.T) {
+	// Analysis finding D1: deferrals don't consume attempts, so without a cap a provider that never
+	// recovers would keep notifications non-terminal forever (Constitution III).
+	tests := []struct {
+		name      string
+		age       time.Duration // since created_at
+		scheduled time.Duration // scheduled_at relative to created_at; 0 = none
+		wantFail  bool
+	}{
+		{"younger than the cap keeps deferring", 30 * time.Minute, 0, false},
+		{"older than the cap fails", 61 * time.Minute, 0, true},
+		{"age counts from a later scheduled_at", 90 * time.Minute, 45 * time.Minute, false},
+		{"scheduled long ago and still failing", 3 * time.Hour, time.Hour, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newDeliverFixture()
+			f.uc.d.MaxDeferAge = time.Hour
+			f.breaker.open, f.breaker.retryIn = true, 30*time.Second
+			now := f.clock.Now()
+			msg := f.queue("n1", func(n *domain.Notification) {
+				n.CreatedAt = now.Add(-tc.age)
+				if tc.scheduled > 0 {
+					at := n.CreatedAt.Add(tc.scheduled)
+					n.ScheduledAt = &at
+				}
+			})
+
+			d := f.uc.Handle(context.Background(), msg)
+			n := f.repo.get("n1")
+			if !tc.wantFail {
+				if d != ports.DecisionAck || n.Status != domain.StatusRetrying {
+					t.Fatalf("decision %s status %s, want a deferral", d, n.Status)
+				}
+				return
+			}
+			if d != ports.DecisionDeadLetter || n.Status != domain.StatusFailed || n.FailedAt == nil {
+				t.Fatalf("decision %s status %s: past BREAKER_MAX_DEFER_AGE it must fail and dead-letter", d, n.Status)
+			}
+			if n.LastError == nil || *n.LastError != "provider_unavailable" || n.Attempts != 0 {
+				t.Fatalf("last_error %v attempts %d, want provider_unavailable and no attempt", n.LastError, n.Attempts)
+			}
+			if f.metrics.get("dead:sms:provider_unavailable") != 1 || f.provider.callCount() != 0 {
+				t.Fatalf("metrics %v calls %d", f.metrics.counts, f.provider.callCount())
+			}
+		})
+	}
+}
+
+func TestDeliverBreakerOpeningMidCallDefers(t *testing.T) {
+	f := newDeliverFixture()
+	f.uc.d.MaxDeferAge = time.Hour
+	f.breaker.rejectOn, f.breaker.retryIn = true, 10*time.Second // Allow passed, Call is rejected
+	if d := f.uc.Handle(context.Background(), f.queue("n1", nil)); d != ports.DecisionAck {
+		t.Fatalf("decision %s", d)
+	}
+	if n := f.repo.get("n1"); n.Status != domain.StatusRetrying || n.Attempts != 0 || f.provider.callCount() != 0 {
+		t.Fatalf("row %s attempts %d calls %d", n.Status, n.Attempts, f.provider.callCount())
+	}
+}
+
+func TestDeliverDeferralNeverOvershootsTheCap(t *testing.T) {
+	f := newDeliverFixture()
+	f.uc.d.MaxDeferAge = time.Hour
+	f.breaker.open, f.breaker.retryIn = true, 10*time.Minute
+	now := f.clock.Now()
+	msg := f.queue("n1", func(n *domain.Notification) { n.CreatedAt = now.Add(-58 * time.Minute) })
+	if d := f.uc.Handle(context.Background(), msg); d != ports.DecisionAck {
+		t.Fatalf("decision %s", d)
+	}
+	n := f.repo.get("n1")
+	capAt := n.CreatedAt.Add(time.Hour)
+	if n.NextAttemptAt.After(capAt.Add(time.Millisecond)) {
+		t.Fatalf("next attempt at %v, after the cap at %v: the cap would be enforced up to a cool-down late",
+			n.NextAttemptAt, capAt)
+	}
+}

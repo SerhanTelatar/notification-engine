@@ -92,7 +92,10 @@ func TestRelayBackpressureBurst(t *testing.T) {
 	cfg.relays = 2 // two worker replicas
 	cfg.maxInflight = cap
 	cfg.concurrency = 20
-	cfg.queuedTimeout = 5 * time.Second // anything stuck longer would be republished, and is counted
+	// Anything queued longer than this is republished and counted. At the nominal ~500/s a row
+	// waits about 2 s behind the 1,000 cap; 15 s leaves room for a loaded CI runner (-race, other
+	// packages in parallel) while still catching a message that is really stuck.
+	cfg.queuedTimeout = 15 * time.Second
 	cfg.reaperInterval = 500 * time.Millisecond
 
 	insertBurst(t, domain.ChannelSMS, "+905551234567", burst)

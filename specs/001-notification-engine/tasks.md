@@ -553,31 +553,31 @@ items not early (quickstart #11).
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T071 [P] [US4] Write unit tests for the batch use case in `internal/app/batch_test.go`:
+- [X] T071 [P] [US4] Write unit tests for the batch use case in `internal/app/batch_test.go`:
   - per-item validation, results in request order
   - all invalid → `ValidationError` with `items[i].field` paths and no repository call
   - 0 or 1,001 items → error
   - duplicate idempotency keys inside the batch → later items resolve to the first item's id
   - `GetBatch`: counts per status sum to the accepted total; unknown id → `ErrNotFound`
-- [ ] T072 [P] [US4] Write the batch integration test in `test/integration/api_batch_test.go`:
+- [X] T072 [P] [US4] Write the batch integration test in `test/integration/api_batch_test.go`:
   - 7/3 partial; 1,000 valid acknowledged in < 2 s (SC-002)
   - 1,001 → 400; all invalid → 400 and no `batches` row
   - `GET /batches/{id}` counts sum to the accepted total; unknown → 404
 
 ### Implementation for User Story 4
 
-- [ ] T073 [US4] Write `sql/queries/batches.sql`: `InsertBatch` (`data-model.md
+- [X] T073 [US4] Write `sql/queries/batches.sql`: `InsertBatch` (`data-model.md
   batches.total_accepted`, `data-model.md batches.total_rejected`, `data-model.md
   batches.correlation_id`), a bulk `InsertNotifications` using `unnest(...) ON CONFLICT
   (idempotency_key) DO NOTHING RETURNING` (R13), `GetBatch`, `CountByStatus`, `ListByBatch`. Run
   `make gen`.
-- [ ] T074 [US4] Implement `internal/adapters/postgres/batch_repo.go` (`ports.BatchRepository`):
+- [X] T074 [US4] Implement `internal/adapters/postgres/batch_repo.go` (`ports.BatchRepository`):
   - the batch row and bulk insert in one tx
   - re-select conflicting keys and compare hashes per item (`data-model.md
     notifications.idempotency_key`, `data-model.md notifications.batch_id`)
-- [ ] T075 [US4] Implement `CreateBatch` and `GetBatch` in `internal/app/batch.go`. Each accepted
+- [X] T075 [US4] Implement `CreateBatch` and `GetBatch` in `internal/app/batch.go`. Each accepted
   item inherits the request correlation id. Broadcast a created event per item. Makes T071 pass.
-- [ ] T076 [US4] Implement the `createBatch` and `getBatch` handlers in
+- [X] T076 [US4] Implement the `createBatch` and `getBatch` handlers in
   `internal/adapters/http/batches.go`, mapping to the `BatchCreateResult` and `BatchDetail`
   schemas. Makes T072 pass.
 
@@ -595,13 +595,13 @@ both times and never received; cancel a `sent` one → 409 with `current_status`
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T077 [P] [US5] Write unit tests for the cancel use case in `internal/app/cancel_test.go`:
+- [X] T077 [P] [US5] Write unit tests for the cancel use case in `internal/app/cancel_test.go`:
   - each cancellable status → `cancelled` (`domain.CancellableFrom`)
   - `sending`/`sent`/`failed` → `ErrNotCancellable` with the current status
   - already `cancelled` → success with no change
   - unknown → `ErrNotFound`
   - batch counts: cancelled / already_cancelled / not_cancellable
-- [ ] T078 [P] [US5] Write the cancel integration test in `test/integration/cancel_test.go`:
+- [X] T078 [P] [US5] Write the cancel integration test in `test/integration/cancel_test.go`:
   - cancel a `queued` notification whose message is in RabbitMQ → the consumer acks and the
     provider is never called
   - race ×100: cancel concurrently with the consumer → exactly one wins and no `cancelled` row has
@@ -611,16 +611,16 @@ both times and never received; cancel a `sent` one → 409 with `current_status`
 
 ### Implementation for User Story 5
 
-- [ ] T079 [US5] Add `CancelNotification` (guarded by
+- [X] T079 [US5] Add `CancelNotification` (guarded by
   `status IN (pending, scheduled, queued, retrying) RETURNING *`, sets `data-model.md
   notifications.cancelled_at`) and `CancelBatch` (`RETURNING id`, plus counts of the remaining
   statuses) to `sql/queries/notifications.sql`. Run `make gen` and implement them in
   `internal/adapters/postgres/notification_repo.go`.
-- [ ] T080 [US5] Implement `Cancel` and `CancelBatch` in `internal/app/cancel.go`:
+- [X] T080 [US5] Implement `Cancel` and `CancelBatch` in `internal/app/cancel.go`:
   - on 0 rows, read the row to decide 404 / 409 / idempotent 200
   - broadcast `cancelled` events
   - makes T077 pass
-- [ ] T081 [US5] Implement the `cancelNotification` handler in
+- [X] T081 [US5] Implement the `cancelNotification` handler in
   `internal/adapters/http/notifications.go` and the `cancelBatch` handler in
   `internal/adapters/http/batches.go`. The batch cancel needs US4's batches to exist. Makes T078
   pass.
@@ -639,10 +639,10 @@ filters applied; `limit=101` or a bad cursor → 400 (quickstart #10).
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T082 [P] [US6] Write unit tests for the cursor in `internal/app/cursor_test.go`: encode and
+- [X] T082 [P] [US6] Write unit tests for the cursor in `internal/app/cursor_test.go`: encode and
   decode round-trip of `{created_at, id}` as base64url; malformed, truncated or tampered input →
   `ValidationError` on `cursor`.
-- [ ] T083 [P] [US6] Write the list integration test in `test/integration/api_list_test.go`:
+- [X] T083 [P] [US6] Write the list integration test in `test/integration/api_list_test.go`:
   - 250 rows → 3 pages, newest first, no duplicates or gaps while concurrent inserts happen
   - `status=failed&channel=email` filter; `from`/`to` range (inclusive/exclusive)
   - an empty result → no `next_cursor`
@@ -650,17 +650,17 @@ filters applied; `limit=101` or a bad cursor → 400 (quickstart #10).
 
 ### Implementation for User Story 6
 
-- [ ] T084 [US6] Implement `internal/app/cursor.go` (opaque keyset cursor) and `List` in
+- [X] T084 [US6] Implement `internal/app/cursor.go` (opaque keyset cursor) and `List` in
   `internal/app/query.go`, which validates `limit` (1–100, default 20) and fetches `limit+1` to
   derive `next_cursor`. Makes T082 pass.
-- [ ] T085 [US6] Add `ListNotifications` to `sql/queries/notifications.sql`:
+- [X] T085 [US6] Add `ListNotifications` to `sql/queries/notifications.sql`:
   - `sqlc.narg` filters
   - `(created_at, id) < ($c, $i)`, `ORDER BY created_at DESC, id DESC`, using
     `notifications_list_idx` / `notifications_list_filtered_idx`
   - run `make gen`, implement it in the repo, and add the `listNotifications` handler in
     `internal/adapters/http/notifications.go`
   - makes T083 pass
-- [ ] T086 [P] [US6] Write `specs/adr/0006-keyset-pagination.md` from R13.
+- [X] T086 [P] [US6] Write `specs/adr/0006-keyset-pagination.md` from R13.
 
 **Checkpoint**: list and filter work on their own.
 
@@ -686,12 +686,12 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
 
 ### Tests for User Story 7 ⚠️
 
-- [ ] T087 [P] [US7] Extend `internal/app/deliver_test.go` with the breaker-open path: the
+- [X] T087 [P] [US7] Extend `internal/app/deliver_test.go` with the breaker-open path: the
   outcome is a `sending → retrying` deferral with `attempts` unchanged, no attempt row, no limiter
   call, and `next_attempt_at` = now + remaining cool-down (FR-024, R5). A notification older than
   `BREAKER_MAX_DEFER_AGE`, measured from `max(created_at, scheduled_at)`, instead goes
   `sending → failed` with `last_error=provider_unavailable` and the dead-letter signal.
-- [ ] T088 [P] [US7] Write the breaker integration test in `test/integration/breaker_test.go`:
+- [X] T088 [P] [US7] Write the breaker integration test in `test/integration/breaker_test.go`:
   - 5 × 503 on sms → `circuit_breaker_state{channel="sms"}` = 2
   - sms `attempts` frozen while the breaker is open
   - email delivered normally throughout (SC-009)
@@ -699,42 +699,42 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - 400 responses never trip it
   - with `BREAKER_MAX_DEFER_AGE=3s` and the mock still failing, an sms notification ends `failed`
     with `last_error=provider_unavailable` and one message in `notifications.dlq`
-- [ ] T089 [P] [US7] Write the observability integration test in
+- [X] T089 [P] [US7] Write the observability integration test in
   `test/integration/observability_test.go`:
   - capture slog output from the api and the worker → every line for a request with
     `X-Correlation-ID: t-1` carries `t-1`, including the worker lines (SC-011)
   - `/metrics` on both binaries exposes every metric in `contracts/observability.md`
   - stop rabbitmq → worker `/readyz` 503 and `/healthz` 200; stop redis → api `/readyz` 200
     `degraded`
-- [ ] T090 [P] [US7] Write the shutdown integration test in `test/integration/shutdown_test.go`:
+- [X] T090 [P] [US7] Write the shutdown integration test in `test/integration/shutdown_test.go`:
   cancel the worker root ctx while 50 sends are in flight (mock latency 500 ms) → each row ends
   either `sent` or `queued`, and after a restart all reach `sent` with no duplicate provider calls
   for rows already `sent` (R17). Also send SIGTERM to the api during 200 concurrent creates →
   every request either got 202 with a durable row or failed with no row stored (SC-004,
   US1-AS11).
 
-- [ ] T091 [P] [US7] Write unit tests for the backlog sampler in `internal/app/sampler_test.go`:
+- [X] T091 [P] [US7] Write unit tests for the backlog sampler in `internal/app/sampler_test.go`:
   repository counts map to `notification_backlog{channel,priority,status}` gauge values via the
   recorder fake; combinations that vanish are reset to 0; a broker-depth error doesn't stop the
   DB-based gauges.
 
 ### Implementation for User Story 7
 
-- [ ] T092 [US7] Implement the per-channel breaker in `internal/adapters/provider/breaker.go`
+- [X] T092 [US7] Implement the per-channel breaker in `internal/adapters/provider/breaker.go`
   (`ports.CircuitBreaker`) with `sony/gobreaker/v2`:
   - `ReadyToTrip` on `BREAKER_CONSECUTIVE_FAILURES` consecutive transient failures
   - `Timeout=BREAKER_COOLDOWN`, `MaxRequests=1`
   - `IsSuccessful` returns true for success and permanent outcomes
   - expose `State()` and the remaining cool-down; update the `circuit_breaker_state` gauge on
     state change (R9)
-- [ ] T093 [US7] (analysis finding D1) Implement the breaker-open deferral in `internal/app/deliver.go`:
+- [X] T093 [US7] (analysis finding D1) Implement the breaker-open deferral in `internal/app/deliver.go`:
   `queued → sending → retrying` in one tx via `DeferSending`, without incrementing
   `data-model.md notifications.attempts`. `ErrOpenState`/`ErrTooManyRequests` take the same path.
   Past `BREAKER_MAX_DEFER_AGE`, `DeferSending` instead moves `sending → failed`, setting
   `data-model.md notifications.last_error` to `provider_unavailable` and
   `data-model.md notifications.failed_at`; the consumer then dead-letters the message.
   Wire the breaker in `cmd/worker/main.go` in place of the noop. Makes T087 and T088 pass.
-- [ ] T094 [US7] Instrument the metrics:
+- [X] T094 [US7] Instrument the metrics:
   - API: an HTTP metrics middleware in `internal/adapters/http/middleware.go`
     (`http_request_duration_seconds` with the chi route pattern); `notifications_created_total` /
     `notifications_rejected_total` in the create and batch handlers
@@ -742,7 +742,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
     `notifications_dead_lettered_total` and `notification_e2e_latency_seconds` emitted from
     `internal/app/deliver.go` through `ports.MetricsRecorder` (defined in T023), with a Prometheus
     implementation in `internal/platform/metrics/recorder.go` replacing the noop recorder
-- [ ] T095 [US7] Implement the backlog sampler:
+- [X] T095 [US7] Implement the backlog sampler:
   - `internal/app/sampler.go`, a 5 s tick
   - a `BacklogCounts` query (GROUP BY channel, priority, status on `notifications_backlog_idx`) in
     `sql/queries/notifications.sql`
@@ -750,7 +750,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - set `rabbitmq_queue_messages{queue}` via passive declare in
     `internal/adapters/rabbitmq/depth.go`
   - (R16)
-- [ ] T096 [US7] Finish readiness and correlation:
+- [X] T096 [US7] Finish readiness and correlation:
   - api readiness: postgres required, redis optional/`degraded`
   - worker readiness: postgres, rabbitmq, redis
   - make sure the correlation id flows from create → `data-model.md
@@ -758,7 +758,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - make sure the recipient and content are never logged
   - files: `cmd/api/main.go`, `cmd/worker/main.go`, `internal/app/deliver.go`
   - makes T089 and T090 pass
-- [ ] T097 [P] [US7] Write `specs/adr/0005-retry-backoff-and-circuit-breaker.md` from R9,
+- [X] T097 [P] [US7] Write `specs/adr/0005-retry-backoff-and-circuit-breaker.md` from R9,
   including the per-process breaker trade-off.
 
 **Checkpoint**: all required stories (US1–US7) are done, including the `BREAKER_MAX_DEFER_AGE`
@@ -772,7 +772,7 @@ DLQ, verified by T087 and T088.
 **Purpose**: per Constitution VII, finish the required features (tested and documented) before
 any bonus work.
 
-- [ ] T098 Write `README.md`:
+- [X] T098 Write `README.md`:
   - setup (`docker compose up`)
   - a "Bugs caught by tests" section from `specs/001-notification-engine/readme-backlog.md`
     (starting with the FOR UPDATE claim fix in `be59a7b`); delete the backlog file once moved
@@ -783,14 +783,28 @@ any bonus work.
   - API curl examples, a configuration table (from `.env.example`), and how to run the tests
   - "what I'd do with more time"
   - (Constitution IX)
-- [ ] T099 Write `scripts/loadtest.sh` and a `make loadtest` target:
+- [X] T099 Write `scripts/loadtest.sh` and a `make loadtest` target:
   - vegeta in Docker (pinned image version) against the running `docker compose` stack
   - 10,000 `POST /api/v1/notifications` with valid, unique SMS payloads
   - report p50/p95/p99, and record the p95 with pass/fail against SC-001 (< 200 ms) in
     `specs/001-notification-engine/checklists/validation.md`
-- [ ] T100 Run the required-scope validation (quickstart.md scenarios #1–#15) against
+- [X] T100 Run the required-scope validation (quickstart.md scenarios #1–#15) against
   `docker compose up`. Record the results in `specs/001-notification-engine/checklists/validation.md`
   and fix any gaps by appending tasks.
+- [X] T120 Fix the gap found by T100 (quickstart #11): the worker published the fixed host port
+  `9090:9090`, so `docker compose up --scale worker=2` failed to start the second replica. Publish
+  a host port range (`9090-9099:9090`) so each replica gets its own ops port.
+- [X] T121 Write the integration test for broker-outage survival in
+  `test/integration/supervisor_test.go` (gap found by T100, quickstart #15 / US7-AS4): the worker
+  exited when RabbitMQ stopped, so `/healthz` and `/readyz` went down with it instead of
+  `/readyz` 503 and `/healthz` 200. Through a TCP proxy: cutting the broker makes the supervisor's
+  readiness check fail while it keeps running; restoring it starts a new session on a new
+  connection and readiness recovers; cancelling ctx stops it cleanly.
+- [X] T122 Implement `internal/adapters/rabbitmq/supervisor.go`: dial and declare the topology,
+  run the AMQP-bound components (relay, reaper, sampler, consumers) as one session per connection,
+  and on connection loss cancel the session and redial with capped exponential backoff. Wire it in
+  `cmd/worker/main.go` with the ops server outside the session, and readiness from the
+  supervisor's current connection. Makes T121 pass.
 
 ---
 

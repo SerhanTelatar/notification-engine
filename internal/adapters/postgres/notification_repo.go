@@ -16,9 +16,6 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/ports"
 )
 
-// errNotYet marks repository methods whose user story hasn't landed (US2, US5, US6, US7).
-var errNotYet = errors.New("not implemented yet")
-
 // NotificationRepo implements ports.NotificationRepository on PostgreSQL.
 type NotificationRepo struct {
 	pool *pgxpool.Pool
@@ -328,18 +325,94 @@ func (r *NotificationRepo) ListAttempts(ctx context.Context, id string) ([]domai
 	return out, nil
 }
 
-// --- Arriving with later user stories ---------------------------------------------------------
-
-func (r *NotificationRepo) List(context.Context, ports.ListFilter) ([]domain.Notification, error) {
-	return nil, fmt.Errorf("list notifications (US6): %w", errNotYet)
+// Cancel cancels one notification if its status allows it (FR-013). The row is locked first, so
+// a cancel that races an open relay transaction waits for its commit and decides on the committed
+// status (the same reason as StartSending).
+func (r *NotificationRepo) Cancel(ctx context.Context, id string, at time.Time) (ports.CancelOutcome, error) {
+	uid, err := parseID(id)
+	if err != nil {
+		return ports.CancelOutcome{}, err
+	}
+	var out ports.CancelOutcome
+	err = WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		prev, err := q.LockForClaim(ctx, uid)
+		if err != nil {
+			return translate(err, "lock for cancel")
+		}
+		previous, err := domain.ParseStatus(prev)
+		if err != nil {
+			return fmt.Errorf("notification %s: %w", id, err)
+		}
+		out.Previous = previous
+		if previous.In(domain.CancellableFrom) {
+			row, err := q.CancelNotification(ctx, sqlcgen.CancelNotificationParams{ID: uid, Now: at})
+			if err != nil {
+				return translate(err, "cancel")
+			}
+			out.Changed = true
+			out.Notification, err = toDomain(row)
+			return err
+		}
+		row, err := q.GetNotification(ctx, uid)
+		if err != nil {
+			return translate(err, "read notification")
+		}
+		out.Notification, err = toDomain(row)
+		return err
+	})
+	if err != nil {
+		return ports.CancelOutcome{}, err
+	}
+	return out, nil
 }
 
-func (r *NotificationRepo) Cancel(context.Context, string, time.Time) (*domain.Notification, bool, error) {
-	return nil, false, fmt.Errorf("cancel (US5): %w", errNotYet)
+// List returns one keyset page, newest first (FR-011, research R13).
+func (r *NotificationRepo) List(ctx context.Context, f ports.ListFilter) ([]domain.Notification, error) {
+	p := sqlcgen.ListNotificationsParams{FromTs: f.From, ToTs: f.To, PageLimit: int32(min(max(f.Limit, 1), 1000))} //nolint:gosec // clamped
+	if f.Status != nil {
+		s := string(*f.Status)
+		p.Status = &s
+	}
+	if f.Channel != nil {
+		c := string(*f.Channel)
+		p.Channel = &c
+	}
+	if f.After != nil {
+		id, err := uuid.Parse(f.After.ID)
+		if err != nil {
+			return nil, fmt.Errorf("cursor id: %w", err)
+		}
+		at := f.After.CreatedAt
+		p.AfterCreatedAt, p.AfterID = &at, &id
+	}
+	rows, err := r.q.ListNotifications(ctx, p)
+	if err != nil {
+		return nil, translate(err, "list notifications")
+	}
+	out := make([]domain.Notification, 0, len(rows))
+	for _, row := range rows {
+		n, err := toDomain(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *n)
+	}
+	return out, nil
 }
 
-func (r *NotificationRepo) BacklogCounts(context.Context) ([]ports.BacklogCount, error) {
-	return nil, fmt.Errorf("backlog counts (US7): %w", errNotYet)
+// BacklogCounts counts non-terminal notifications by channel, priority and status (FR-031).
+func (r *NotificationRepo) BacklogCounts(ctx context.Context) ([]ports.BacklogCount, error) {
+	rows, err := r.q.BacklogCounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("backlog counts: %w", err)
+	}
+	out := make([]ports.BacklogCount, len(rows))
+	for i, row := range rows {
+		out[i] = ports.BacklogCount{Channel: domain.Channel(row.Channel), Priority: domain.Priority(row.Priority),
+			Status: domain.Status(row.Status), Count: int(row.N)}
+	}
+	return out, nil
 }
 
 // --- Mapping ----------------------------------------------------------------------------------

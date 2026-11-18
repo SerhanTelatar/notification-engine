@@ -6,6 +6,8 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+
+	"github.com/SerhanTelatar/notification-engine/internal/domain"
 )
 
 // Label names shared across collectors.
@@ -66,8 +68,27 @@ func NewAPI(reg prometheus.Registerer) *API {
 		}),
 	}
 	reg.MustRegister(m.HTTPRequestDuration, m.NotificationsCreated, m.NotificationsRejected, m.WSConnections)
+	for _, ch := range domain.Channels {
+		for _, p := range priorities {
+			m.NotificationsCreated.WithLabelValues(string(ch), p)
+		}
+	}
+	for _, reason := range []string{"validation_failed", "idempotency_conflict"} {
+		m.NotificationsRejected.WithLabelValues(reason)
+	}
 	return m
 }
+
+// Label values known up front. Series are pre-initialised so every contract metric appears on
+// /metrics from startup (at zero), not only after its first event, which dashboards and alerts
+// need.
+var (
+	priorities      = []string{"high", "normal", "low"}
+	outcomes        = []string{"success", "transient", "permanent", "deferred", "abandoned"}
+	deadReasons     = []string{"exhausted", "permanent", "provider_unavailable"}
+	backlogStatuses = []string{"pending", "scheduled", "queued", "sending", "retrying"}
+	queues          = []string{"notifications.sms", "notifications.email", "notifications.push", "notifications.dlq"}
+)
 
 // Worker holds the collectors emitted by cmd/worker.
 type Worker struct {
@@ -148,5 +169,33 @@ func NewWorker(reg prometheus.Registerer) *Worker {
 	reg.MustRegister(m.Delivered, m.Retries, m.DeadLettered, m.Backlog, m.RabbitQueue,
 		m.ProviderDuration, m.E2ELatency, m.LimiterWait, m.LimiterTimeouts, m.BreakerState,
 		m.RelayPublished, m.RelaySkips, m.ReaperRecovered)
+	for _, ch := range domain.Channels {
+		c := string(ch)
+		for _, o := range outcomes {
+			m.Delivered.WithLabelValues(c, o)
+			m.ProviderDuration.WithLabelValues(c, o)
+		}
+		for _, r := range deadReasons {
+			m.DeadLettered.WithLabelValues(c, r)
+		}
+		for _, p := range priorities {
+			m.E2ELatency.WithLabelValues(c, p)
+			for _, s := range backlogStatuses {
+				m.Backlog.WithLabelValues(c, p, s)
+			}
+		}
+		m.Retries.WithLabelValues(c)
+		m.LimiterWait.WithLabelValues(c)
+		m.LimiterTimeouts.WithLabelValues(c)
+		m.BreakerState.WithLabelValues(c)
+		m.RelayPublished.WithLabelValues(c)
+		m.RelaySkips.WithLabelValues(c)
+	}
+	for _, q := range queues {
+		m.RabbitQueue.WithLabelValues(q)
+	}
+	for _, k := range []string{"sending", "queued"} {
+		m.ReaperRecovered.WithLabelValues(k)
+	}
 	return m
 }

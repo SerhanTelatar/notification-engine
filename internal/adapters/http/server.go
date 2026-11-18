@@ -15,6 +15,7 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/http/gen"
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/metrics"
 )
 
 // Server timeouts and limits (research R15).
@@ -34,31 +35,46 @@ var errNotImplemented = errors.New("operation not implemented yet")
 // Deps are the use cases and services behind the API. A nil use case means its operation
 // returns 501 until its user story lands.
 type Deps struct {
-	Log     *slog.Logger
-	Health  *health.Checker
-	Creator *app.Creator
-	Query   *app.Query
+	Log       *slog.Logger
+	Health    *health.Checker
+	Creator   *app.Creator
+	Query     *app.Query
+	Batcher   *app.Batcher
+	Canceller *app.Canceller
+	// Metrics, when set, counts created and rejected notifications.
+	Metrics *metrics.API
 }
 
 // Server implements gen.StrictServerInterface. Operations not built yet return errNotImplemented.
 type Server struct {
-	log    *slog.Logger
-	health *health.Checker
-	create *app.Creator
-	query  *app.Query
+	log     *slog.Logger
+	health  *health.Checker
+	create  *app.Creator
+	query   *app.Query
+	batch   *app.Batcher
+	cancel  *app.Canceller
+	metrics *metrics.API
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
 // NewServer returns the strict-server implementation.
 func NewServer(d Deps) *Server {
-	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query}
+	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher, cancel: d.Canceller, metrics: d.Metrics}
 }
 
 // NewRouter mounts the generated routes on chi.
-func NewRouter(log *slog.Logger, s gen.StrictServerInterface) chi.Router {
+func NewRouter(log *slog.Logger, s gen.StrictServerInterface, opts ...RouterOption) chi.Router {
+	var cfg routerConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	r := chi.NewRouter()
-	r.Use(Recover(log), CorrelationID, AccessLog(log), Timeout(RequestTimeout))
+	r.Use(Recover(log), CorrelationID, AccessLog(log))
+	if cfg.metrics != nil {
+		r.Use(RequestMetrics(cfg.metrics))
+	}
+	r.Use(Timeout(RequestTimeout))
 	strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler(log),
 		ResponseErrorHandlerFunc: responseErrorHandler(log),
@@ -83,26 +99,6 @@ func NewHTTPServer(addr string, h http.Handler) *http.Server {
 }
 
 // --- Operations: each returns errNotImplemented until its user story lands. ---
-
-func (s *Server) ListNotifications(context.Context, gen.ListNotificationsRequestObject) (gen.ListNotificationsResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) CancelNotification(context.Context, gen.CancelNotificationRequestObject) (gen.CancelNotificationResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) CreateBatch(context.Context, gen.CreateBatchRequestObject) (gen.CreateBatchResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) GetBatch(context.Context, gen.GetBatchRequestObject) (gen.GetBatchResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) CancelBatch(context.Context, gen.CancelBatchRequestObject) (gen.CancelBatchResponseObject, error) {
-	return nil, errNotImplemented
-}
 
 func (s *Server) CreateTemplate(context.Context, gen.CreateTemplateRequestObject) (gen.CreateTemplateResponseObject, error) {
 	return nil, errNotImplemented

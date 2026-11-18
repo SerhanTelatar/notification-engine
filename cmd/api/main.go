@@ -12,11 +12,15 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
+
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/SerhanTelatar/notification-engine/api"
 	httpapi "github.com/SerhanTelatar/notification-engine/internal/adapters/http"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/noop"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/postgres"
+	redisadapter "github.com/SerhanTelatar/notification-engine/internal/adapters/redis"
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/config"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
@@ -63,10 +67,14 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	defer pool.Close() // after the HTTP server has drained
 
 	reg := metrics.NewRegistry()
-	_ = metrics.NewAPI(reg) // instrumented in US1/US7
+	apiMetrics := metrics.NewAPI(reg)
 
-	checker := health.New(health.DefaultTimeout).
-		Require("postgres", postgres.Ping(pool))
+	// Redis carries live status events only (US9); without it the API stays ready but degraded.
+	rdb := goredis.NewClient(&goredis.Options{
+		Addr: cfg.RedisAddr, DialTimeout: 2 * time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second,
+	})
+	defer func() { _ = rdb.Close() }()
+	checker := health.ForAPI(health.DefaultTimeout, postgres.Ping(pool), redisadapter.Ping(rdb))
 
 	repo := postgres.NewNotificationRepo(pool)
 	creator := app.NewCreator(app.CreatorDeps{
@@ -75,7 +83,12 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	})
 
 	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker, Creator: creator,
-		Query: app.NewQuery(app.QueryDeps{Repo: repo})}))
+		Query: app.NewQuery(app.QueryDeps{Repo: repo}),
+		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(pool), IDs: noop.UUIDv7{}, Clock: noop.Clock{},
+			Events: noop.Broadcaster{}, Log: log, MaxAttempts: cfg.MaxAttempts}),
+		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(pool),
+			Events: noop.Broadcaster{}, Clock: noop.Clock{}, Log: log}),
+		Metrics: apiMetrics}), httpapi.WithMetrics(apiMetrics))
 	httpapi.MountOps(router, reg, api.Spec)
 	srv := httpapi.NewHTTPServer(cfg.HTTPAddr, router)
 

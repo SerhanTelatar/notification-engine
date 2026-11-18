@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/SerhanTelatar/notification-engine/internal/ports"
 )
 
 // Every metric named in contracts/observability.md must exist with exactly those labels.
@@ -39,12 +41,19 @@ func TestCollectorsMatchContract(t *testing.T) {
 		"rate_limiter_wait_seconds", "rate_limiter_timeouts_total", "circuit_breaker_state",
 		"relay_published_total", "relay_backpressure_skips_total", "reaper_recovered_total",
 	}
-	n, err := testutil.GatherAndCount(reg, want...)
+	// Series are pre-initialised, so count families, not series.
+	families, err := reg.Gather()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != len(want) {
-		t.Fatalf("gathered %d series for %d contract metrics", n, len(want))
+	have := map[string]bool{}
+	for _, f := range families {
+		have[f.GetName()] = true
+	}
+	for _, name := range want {
+		if !have[name] {
+			t.Errorf("contract metric %s not registered", name)
+		}
 	}
 }
 
@@ -52,4 +61,51 @@ func TestRegistriesAreIndependent(t *testing.T) {
 	// Two registries must not collide: there's no global state.
 	NewAPI(NewRegistry())
 	NewAPI(NewRegistry())
+}
+
+// Every worker metric in the contract is visible right after startup, before any event.
+func TestWorkerMetricsArePreInitialised(t *testing.T) {
+	reg := NewRegistry()
+	NewWorker(reg)
+	want := []string{
+		"notifications_delivered_total", "notification_retries_total", "notifications_dead_lettered_total",
+		"notification_backlog", "rabbitmq_queue_messages", "provider_request_duration_seconds",
+		"notification_e2e_latency_seconds", "rate_limiter_wait_seconds", "rate_limiter_timeouts_total",
+		"circuit_breaker_state", "relay_published_total", "relay_backpressure_skips_total", "reaper_recovered_total",
+	}
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[string]bool{}
+	for _, f := range families {
+		have[f.GetName()] = true
+	}
+	for _, name := range want {
+		if !have[name] {
+			t.Errorf("%s missing before any event", name)
+		}
+	}
+}
+
+func TestRecorderWritesTheCollectors(t *testing.T) {
+	reg := NewRegistry()
+	w := NewWorker(reg)
+	r := NewRecorder(w)
+	r.DeadLettered("sms", "provider_unavailable")
+	r.Backlog([]ports.BacklogCount{{Channel: "email", Priority: 3, Status: "queued", Count: 4}})
+	r.QueueDepth("notifications.dlq", 2)
+	r.Reaped("sending", 3)
+	if v := testutil.ToFloat64(w.DeadLettered.WithLabelValues("sms", "provider_unavailable")); v != 1 {
+		t.Fatalf("dead lettered = %v", v)
+	}
+	if v := testutil.ToFloat64(w.Backlog.WithLabelValues("email", "high", "queued")); v != 4 {
+		t.Fatalf("backlog = %v", v)
+	}
+	if v := testutil.ToFloat64(w.RabbitQueue.WithLabelValues("notifications.dlq")); v != 2 {
+		t.Fatalf("queue depth = %v", v)
+	}
+	if v := testutil.ToFloat64(w.ReaperRecovered.WithLabelValues("sending")); v != 3 {
+		t.Fatalf("reaped = %v", v)
+	}
 }
