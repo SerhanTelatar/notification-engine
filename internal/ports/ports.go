@@ -197,6 +197,7 @@ type Message struct {
 	Channel        domain.Channel
 	Priority       domain.Priority
 	CorrelationID  string
+	TraceParent    string // W3C trace context from the row; "" when tracing is off
 	EnqueuedAt     time.Time
 }
 

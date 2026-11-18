@@ -7,6 +7,7 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/logger"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/tracing"
 )
 
 // CreateBatch accepts 1–1,000 notifications with per-item results (FR-007, FR-008). It returns
@@ -19,11 +20,12 @@ func (s *Server) CreateBatch(ctx context.Context, req gen.CreateBatchRequestObje
 	if req.Body == nil {
 		return nil, domain.NewFieldError("body", "is required")
 	}
-	cid := logger.CorrelationID(ctx)
+	cid, traceParent := logger.CorrelationID(ctx), tracing.TraceParent(ctx)
 	items := make([]app.CreateRequest, len(req.Body.Items))
 	for i := range req.Body.Items {
 		it := &req.Body.Items[i]
 		items[i] = fromAPIRequest(it, it.IdempotencyKey, cid)
+		items[i].TraceParent = traceParent
 	}
 	res, err := s.batch.CreateBatch(ctx, app.BatchRequest{Items: items, CorrelationID: cid})
 	if err != nil {

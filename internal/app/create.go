@@ -24,6 +24,7 @@ type CreateRequest struct {
 	TemplateID     *string
 	Variables      map[string]string
 	CorrelationID  string
+	TraceParent    string // W3C trace context to carry through the outbox (tracing on)
 }
 
 // CreateResult is the stored notification. Replayed is true when an idempotency key matched an
@@ -118,7 +119,7 @@ func buildNotification(req CreateRequest, tpl *domain.Template, id string, now t
 	draft := domain.Draft{
 		Recipient: req.Recipient, Channel: req.Channel, Content: content, Priority: req.Priority,
 		ScheduledAt: req.ScheduledAt, IdempotencyKey: req.IdempotencyKey, CorrelationID: req.CorrelationID,
-		BatchID: batchID,
+		TraceParent: req.TraceParent, BatchID: batchID,
 	}
 	if req.Content == nil { // a template request keeps its id and variables for audit and the hash
 		draft.TemplateID, draft.Variables = req.TemplateID, req.Variables

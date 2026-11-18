@@ -468,7 +468,7 @@ func insertParams(n *domain.Notification) (sqlcgen.InsertNotificationParams, err
 		Channel: string(n.Channel), Recipient: n.Recipient, Content: n.Content, Priority: int16(n.Priority),
 		Status: string(n.Status), MaxAttempts: int32(min(n.MaxAttempts, 1<<30)), //nolint:gosec // bounded
 		NextAttemptAt: n.NextAttemptAt, ScheduledAt: n.ScheduledAt, TemplateID: templateID,
-		TemplateVars: vars, CorrelationID: n.CorrelationID, CreatedAt: n.CreatedAt,
+		TemplateVars: vars, CorrelationID: n.CorrelationID, Traceparent: optionalText(n.TraceParent), CreatedAt: n.CreatedAt,
 	}, nil
 }
 
@@ -491,7 +491,7 @@ func toDomain(r sqlcgen.Notification) (*domain.Notification, error) {
 		Attempts: int(r.Attempts), MaxAttempts: int(r.MaxAttempts), NextAttemptAt: r.NextAttemptAt.UTC(),
 		ScheduledAt: utc(r.ScheduledAt), ProviderMessageID: r.ProviderMessageID, LastError: r.LastError,
 		CorrelationID: r.CorrelationID, CreatedAt: r.CreatedAt.UTC(), UpdatedAt: r.UpdatedAt.UTC(),
-		SentAt: utc(r.SentAt), CancelledAt: utc(r.CancelledAt), FailedAt: utc(r.FailedAt),
+		TraceParent: deref(r.Traceparent), SentAt: utc(r.SentAt), CancelledAt: utc(r.CancelledAt), FailedAt: utc(r.FailedAt),
 	}
 	if r.BatchID != nil {
 		s := r.BatchID.String()
@@ -515,4 +515,19 @@ func utc(t *time.Time) *time.Time {
 	}
 	u := t.UTC()
 	return &u
+}
+
+// optionalText stores "" as NULL.
+func optionalText(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

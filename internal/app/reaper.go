@@ -94,7 +94,7 @@ func (r *Reaper) republishQueued(ctx context.Context) error {
 		msgs := make([]ports.Message, len(rows))
 		for i, n := range rows {
 			msgs[i] = ports.Message{NotificationID: n.ID, Channel: n.Channel, Priority: n.Priority,
-				CorrelationID: n.CorrelationID, EnqueuedAt: now}
+				CorrelationID: n.CorrelationID, TraceParent: n.TraceParent, EnqueuedAt: now}
 			d.Log.WarnContext(ctx, "republishing a notification stuck in queued", attrNotificationID, n.ID,
 				attrCorrelationID, n.CorrelationID, "queued_for", now.Sub(n.UpdatedAt).Round(time.Second).String())
 		}

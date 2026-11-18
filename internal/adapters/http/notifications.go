@@ -9,6 +9,7 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/logger"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/tracing"
 )
 
 const replayedHeaderValue = "true"
@@ -29,7 +30,9 @@ func (s *Server) CreateNotification(ctx context.Context, req gen.CreateNotificat
 		return nil, err
 	}
 
-	res, err := s.create.Create(ctx, fromAPIRequest(b, key, logger.CorrelationID(ctx)))
+	cr := fromAPIRequest(b, key, logger.CorrelationID(ctx))
+	cr.TraceParent = tracing.TraceParent(ctx) // "" when tracing is off
+	res, err := s.create.Create(ctx, cr)
 	if err != nil {
 		s.countRejected(err)
 		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler

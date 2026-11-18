@@ -42,6 +42,7 @@ type Notification struct {
 	SentAt            *time.Time
 	CancelledAt       *time.Time
 	FailedAt          *time.Time
+	Traceparent       *string
 }
 
 type NotificationAttempt struct {

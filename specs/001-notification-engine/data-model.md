@@ -77,6 +77,7 @@ rejected.
 | `provider_message_id` | `text` | yes | |
 | `last_error` | `text` | yes | truncated to 1 KB; set to `provider_unavailable` when a breaker deferral exceeds `BREAKER_MAX_DEFER_AGE` (research R9) |
 | `correlation_id` | `text` | no | |
+| `traceparent` | `text` | yes | W3C trace context of the creating request (bonus tracing, migration 00003); NULL when tracing is off |
 | `created_at` / `updated_at` | `timestamptz` | no | `updated_at` is set on every transition |
 | `sent_at` | `timestamptz` | yes | |
 | `cancelled_at` / `failed_at` | `timestamptz` | yes | |

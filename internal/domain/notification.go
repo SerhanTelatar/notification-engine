@@ -30,6 +30,7 @@ type Notification struct {
 	ScheduledAt       *time.Time
 	TemplateID        *string
 	TemplateVars      map[string]string
+	TraceParent       string // W3C trace context of the request that created it; "" when tracing is off
 	ProviderMessageID *string
 	LastError         *string
 	CorrelationID     string
@@ -52,6 +53,7 @@ type Draft struct {
 	TemplateID     *string
 	Variables      map[string]string
 	CorrelationID  string
+	TraceParent    string
 	BatchID        *string
 }
 
@@ -107,6 +109,7 @@ func NewNotification(d Draft, id string, now time.Time, maxAttempts int) (*Notif
 		TemplateID:     d.TemplateID,
 		TemplateVars:   d.Variables,
 		CorrelationID:  d.CorrelationID,
+		TraceParent:    d.TraceParent,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
