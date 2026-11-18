@@ -347,7 +347,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - backpressure: 5,000 SMS with `RELAY_MAX_INFLIGHT_PER_CHANNEL=1000` and 2 relays. The
     sampled sms `queued` count is never above 1000, the whole burst is delivered,
     `reaper_recovered_total{kind="queued"}` stays 0, and email isn't blocked
-- [ ] T045 [P] [US1] Write the crash-recovery integration tests in
+- [X] T045 [P] [US1] Write the crash-recovery integration tests in
   `test/integration/recovery_test.go`:
   - a stale `sending` row → retried by the reaper and then sent
   - a stale `queued` row without a message → republished and sent
