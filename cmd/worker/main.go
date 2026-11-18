@@ -18,11 +18,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	amqp "github.com/rabbitmq/amqp091-go"
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/noop"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/postgres"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/provider"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/rabbitmq"
+	redisadapter "github.com/SerhanTelatar/notification-engine/internal/adapters/redis"
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/config"
@@ -67,6 +69,11 @@ func run(ctx context.Context) error {
 	publisher := rabbitmq.NewPublisher(conn, rabbitmq.DefaultPublishTimeout)
 	defer publisher.Close()
 
+	rdb := goredis.NewClient(&goredis.Options{
+		Addr: cfg.RedisAddr, DialTimeout: 2 * time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second,
+	})
+	defer func() { _ = rdb.Close() }()
+
 	reg := metrics.NewRegistry()
 	m := metrics.NewWorker(reg)
 
@@ -77,9 +84,11 @@ func run(ctx context.Context) error {
 			m.ProviderDuration.WithLabelValues(string(ch), string(o)).Observe(d.Seconds())
 		})
 	clock, ids := noop.Clock{}, noop.UUIDv7{}
-	// Pass-throughs until their stories: the Redis limiter (US3), the gobreaker breaker and the
-	// Prometheus recorder (US7), the Redis broadcaster (US9).
-	limiter, breaker, events, recorder := noop.Limiter{}, noop.Breaker{}, noop.Broadcaster{}, noop.Recorder{}
+	// Shared across every worker: at most RATE_LIMIT_PER_SECOND deliveries per channel (FR-016).
+	limiter := redisadapter.NewRateLimiter(rdb, cfg.RateLimitPerSecond)
+	// Pass-throughs until their stories: the gobreaker breaker and the Prometheus recorder (US7),
+	// the Redis broadcaster (US9).
+	breaker, events, recorder := noop.Breaker{}, noop.Broadcaster{}, noop.Recorder{}
 
 	// --- Use cases ----------------------------------------------------------------------------
 	deliverer := app.NewDeliverer(app.DelivererDeps{
@@ -99,7 +108,8 @@ func run(ctx context.Context) error {
 	// --- Readiness: every dependency the worker needs to make progress -----------------------
 	checker := health.New(health.DefaultTimeout).
 		Require("postgres", postgres.Ping(pool)).
-		Require("rabbitmq", amqpAlive(conn))
+		Require("rabbitmq", amqpAlive(conn)).
+		Require("redis", redisadapter.Ping(rdb)) // the limiter fails closed without it
 
 	// --- Components ---------------------------------------------------------------------------
 	logTickError := func(component string) func(error) {
@@ -116,7 +126,7 @@ func run(ctx context.Context) error {
 	}
 
 	log.InfoContext(ctx, "worker starting",
-		"ops_addr", cfg.OpsAddr, "provider_timeout", cfg.ProviderTimeout.String(),
+		"ops_addr", cfg.OpsAddr, "provider_timeout", cfg.ProviderTimeout.String(), "rate_limit_per_second", cfg.RateLimitPerSecond,
 		"relay_interval", cfg.RelayInterval.String(), "relay_max_inflight_per_channel", cfg.RelayMaxInflightPerChannel,
 		"consumer_concurrency_per_channel", cfg.ConsumerConcurrencyPerChannel, "max_backoff", cfg.BackoffMax.String())
 	err = shutdown.Run(ctx, log, cfg.ShutdownTimeout, components...)

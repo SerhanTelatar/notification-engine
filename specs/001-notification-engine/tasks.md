@@ -532,7 +532,7 @@ items not early (quickstart #11).
   - `Acquire(ctx, channel)` loops on the returned wait with ctx
   - `rate_limiter_wait_seconds` histogram
   - (R8) makes the first part of T066 pass
-- [ ] T069 [US3] Wire the Redis client and limiter into `cmd/worker/main.go`, replacing the noop
+- [X] T069 [US3] Wire the Redis client and limiter into `cmd/worker/main.go`, replacing the noop
   limiter; add Redis to worker readiness. Add a `demo-burst` script in `scripts/demo-burst.sh`
   (5,000 mixed-priority SMS via the batch endpoint, falling back to single creates) referenced by
   the Makefile. Makes T066 and T067 pass.
