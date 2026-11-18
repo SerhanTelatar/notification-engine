@@ -71,7 +71,7 @@ green.
 - [X] T009 Create `.github/workflows/ci.yml` with jobs `lint` (golangci-lint), `gen-check`,
   `unit` (`make test-unit`), `integration` (`make test`, Docker on ubuntu-latest) and `build`
   (docker build). Required to pass before merge (plan phase A, R18).
-- [ ] T010 [P] Write `specs/adr/0001-rabbitmq-over-kafka-and-postgres-queue.md` from R3 (context,
+- [X] T010 [P] Write `specs/adr/0001-rabbitmq-over-kafka-and-postgres-queue.md` from R3 (context,
   decision, alternatives, consequences).
 - [ ] T011 [P] Write `specs/adr/0002-transactional-outbox-in-notifications-table.md` from R4,
   including the publish-inside-tx race fix and relay backpressure.
