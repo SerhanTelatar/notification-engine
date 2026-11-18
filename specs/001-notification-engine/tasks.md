@@ -68,7 +68,7 @@ green.
   - `api` and `worker` with `depends_on` conditions (`service_healthy` /
     `service_completed_successfully`) (R14)
   - ports 8080 (api), 9090 (worker ops) and 15672 (RabbitMQ UI)
-- [ ] T009 Create `.github/workflows/ci.yml` with jobs `lint` (golangci-lint), `gen-check`,
+- [X] T009 Create `.github/workflows/ci.yml` with jobs `lint` (golangci-lint), `gen-check`,
   `unit` (`make test-unit`), `integration` (`make test`, Docker on ubuntu-latest) and `build`
   (docker build). Required to pass before merge (plan phase A, R18).
 - [ ] T010 [P] Write `specs/adr/0001-rabbitmq-over-kafka-and-postgres-queue.md` from R3 (context,
