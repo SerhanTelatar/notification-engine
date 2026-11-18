@@ -706,7 +706,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - `/metrics` on both binaries exposes every metric in `contracts/observability.md`
   - stop rabbitmq → worker `/readyz` 503 and `/healthz` 200; stop redis → api `/readyz` 200
     `degraded`
-- [ ] T090 [P] [US7] Write the shutdown integration test in `test/integration/shutdown_test.go`:
+- [X] T090 [P] [US7] Write the shutdown integration test in `test/integration/shutdown_test.go`:
   cancel the worker root ctx while 50 sends are in flight (mock latency 500 ms) → each row ends
   either `sent` or `queued`, and after a restart all reach `sent` with no duplicate provider calls
   for rows already `sent` (R17). Also send SIGTERM to the api during 200 concurrent creates →
