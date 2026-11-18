@@ -70,6 +70,11 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 
 	reg := metrics.NewRegistry()
 	apiMetrics := metrics.NewAPI(reg)
+	routes, err := httpapi.SuccessRoutes(api.Spec) // zero series per operation, from the contract
+	if err != nil {
+		return err
+	}
+	apiMetrics.InitHTTP(routes)
 	tr, err := tracing.New(ctx, cfg.OTLPEndpoint, "notification-engine-api") // no-op without an endpoint
 	if err != nil {
 		return err
