@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Approved (2026-11-18)
 
 **Input**: User description: "Build an event-driven notification system that accepts notification
 requests over an HTTP API and delivers them asynchronously through three channels — SMS, Email and
@@ -227,8 +227,8 @@ metrics, logs by correlation id, readiness and the per-channel pause behave as d
 4. **Given** the system is running but a required dependency is down, **When** checked, **Then**
    liveness reports healthy and readiness reports not ready.
 5. **Given** the SMS provider fails repeatedly, **When** the failure threshold is reached, **Then**
-   SMS delivery pauses for a cool-down period, paused notifications are not marked failed nor
-   consume attempts, email and push continue normally, and SMS resumes automatically once a trial
+   SMS delivery pauses for a cool-down period, paused notifications neither consume attempts nor
+   are marked failed (unless held past the maximum deferral age), email and push continue normally, and SMS resumes automatically once a trial
    delivery succeeds.
 
 ---
@@ -368,7 +368,7 @@ each transition through to `sent` in order.
 - **FR-017**: When a backlog exists for a channel, System MUST start high priority deliveries before
   normal, and normal before low.
 - **FR-018**: System MUST NOT deliver a scheduled notification before its scheduled time, and MUST
-  move it to processing within a few seconds after that time.
+  move it to processing within 5 seconds after that time.
 - **FR-019**: System MUST send each delivery to the configured provider endpoint as a request
   containing recipient, channel and content, and treat the provider's accepted response as `sent`,
   storing the returned message id.
@@ -385,8 +385,11 @@ each transition through to `sent` in order.
 - **FR-023**: System MUST apply a time limit to every provider call (configurable).
 - **FR-024**: System MUST pause delivery for a channel after repeated consecutive transient
   failures for that channel, resume automatically after a cool-down via a trial delivery, and keep
-  other channels unaffected. Notifications held during a pause MUST NOT consume attempts or be
-  failed.
+  other channels unaffected. Notifications held during a pause MUST NOT consume attempts. A held
+  notification MUST NOT be failed unless it has been held longer than a configurable maximum
+  deferral age (default 1 hour, measured from creation, or from the scheduled time if that is
+  later). Past that age it MUST be marked `failed` with reason `provider_unavailable` and placed in
+  the dead-letter area.
 
 **Durability**
 
@@ -437,7 +440,8 @@ each transition through to `sent` in order.
   channel, content (rendered), priority, status, scheduled time, idempotency key, template id,
   batch id, correlation id, attempt count, provider message id, last error, lifecycle timestamps.
 - **Delivery Attempt**: one try to hand a notification to the provider. Attributes: notification,
-  attempt number, start time, duration, outcome (success / transient / permanent), provider
+  attempt number, start time, duration, outcome (success / transient / permanent / abandoned, where abandoned means the call was
+  interrupted by a crash and later recovered), provider
   status code, error detail.
 - **Batch**: a group of notifications submitted together. Attributes: id, created time,
   correlation id, item count; status totals are derived from its notifications.
@@ -445,7 +449,8 @@ each transition through to `sent` in order.
 - **Dead-letter entry**: a notification that ended `failed`, with reason and final attempt, for
   operator inspection.
 - **Status Event**: a record that a notification changed status (id, batch id, from, to, time),
-  used for real-time subscribers and audit.
+  used for real-time subscribers. It is not persisted; attempt history and lifecycle timestamps
+  are the audit trail.
 
 ## Success Criteria *(mandatory)*
 
@@ -462,12 +467,14 @@ each transition through to `sent` in order.
   provider delivery in 100% of test runs.
 - **SC-006**: Zero cancelled notifications are delivered across all cancellation and race tests.
 - **SC-007**: With a backlog of mixed priorities, every high priority item starts sending before
-  any normal or low item that was still waiting when it arrived.
+  any normal or low item that was still waiting when it arrived. The only exceptions are items
+  already taken off the queue by consumers, at most `consumer concurrency × worker count` per
+  channel (default 20 per worker).
 - **SC-008**: No scheduled notification is delivered before its time, and 95% are delivered within
   5 seconds after it (when the channel has no backlog).
-- **SC-009**: When one channel's provider is failing, the other channels' throughput and latency
-  remain within 10% of normal, and the failing channel resumes within one cool-down period after
-  the provider recovers.
+- **SC-009**: When one channel's provider is failing, the other channels continue delivering
+  unaffected, and the failing channel resumes within one cool-down period after the provider
+  recovers.
 - **SC-010**: Real-time subscribers receive status changes within 1 second of the change.
 - **SC-011**: An operator can find every log entry for a given request or notification using only
   its correlation id.
@@ -486,7 +493,8 @@ each transition through to `sent` in order.
   never pre-empted.
 - Default backoff: base delay 1 second, doubling per attempt, capped at 5 minutes, with full jitter.
 - Default provider call timeout: 5 seconds. Default channel pause: after 5 consecutive transient
-  failures, for 30 seconds, then one trial delivery.
+  failures, for 30 seconds, then one trial delivery. A notification held by a pause for more than
+  1 hour fails with `provider_unavailable`.
 - The dead-letter area is inspectable via the status and list endpoints (status `failed`);
   re-driving failed notifications is out of scope.
 - Template bodies are channel-agnostic; channel limits apply to the rendered result. Template

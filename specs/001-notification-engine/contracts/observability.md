@@ -14,12 +14,13 @@ status ∈ 8, and outcome ∈ {success, transient, permanent, deferred, abandone
 | `notifications_rejected_total` | counter | reason | api | Validation failures |
 | `notifications_delivered_total` | counter | channel, outcome | worker | Outcomes of provider calls; rates via `rate()` |
 | `notification_retries_total` | counter | channel | worker | Transitions to `retrying` |
-| `notifications_dead_lettered_total` | counter | channel, reason | worker | Transitions to `failed` |
+| `notifications_dead_lettered_total` | counter | channel, reason | worker | Transitions to `failed`; reason ∈ {exhausted, permanent, provider_unavailable} |
 | `notification_backlog` | gauge | channel, priority, status | worker (sampled every 5 s from DB) | Queue depth per channel/priority (FR-031) |
 | `rabbitmq_queue_messages` | gauge | queue | worker (passive declare every 5 s) | Broker-side depth |
 | `provider_request_duration_seconds` | histogram | channel, outcome | worker | Provider call latency |
 | `notification_e2e_latency_seconds` | histogram | channel, priority | worker | `sent_at − max(created_at, scheduled_at)` |
 | `rate_limiter_wait_seconds` | histogram | channel | worker | Time spent waiting for a permit |
+| `rate_limiter_timeouts_total` | counter | channel | worker | Messages requeued because no permit was obtained within `LIMITER_MAX_WAIT` |
 | `circuit_breaker_state` | gauge | channel | worker | 0 closed, 1 half-open, 2 open |
 | `relay_published_total` | counter | channel | worker | Messages published by the relay |
 | `relay_backpressure_skips_total` | counter | channel | worker | Relay ticks that skipped a channel because its `queued` count was at `RELAY_MAX_INFLIGHT_PER_CHANNEL` |

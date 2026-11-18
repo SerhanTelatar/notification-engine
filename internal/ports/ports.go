@@ -1,0 +1,264 @@
+// Package ports declares the interfaces the application layer depends on (Constitution II).
+// Adapters implement them; use cases never import an adapter. Every I/O method takes a
+// context.Context first.
+package ports
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/SerhanTelatar/notification-engine/internal/domain"
+)
+
+// ---------------------------------------------------------------------------------------------
+// Time and identity
+// ---------------------------------------------------------------------------------------------
+
+// Clock abstracts time so tests control it.
+type Clock interface {
+	Now() time.Time
+}
+
+// IDGenerator produces new entity ids (UUIDv7, data-model.md notifications.id).
+type IDGenerator interface {
+	NewID() string
+}
+
+// ---------------------------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------------------------
+
+// ListFilter selects notifications for keyset pagination (FR-011). From is inclusive, To
+// exclusive; After is the decoded cursor of the previous page.
+type ListFilter struct {
+	Status  *domain.Status
+	Channel *domain.Channel
+	From    *time.Time
+	To      *time.Time
+	After   *Cursor
+	Limit   int
+}
+
+// Cursor is the keyset position (created_at, id), newest first.
+type Cursor struct {
+	CreatedAt time.Time
+	ID        string
+}
+
+// RelayResult reports one channel's relay pass.
+type RelayResult struct {
+	Published int
+	// Skipped is set when the pass published nothing on purpose: "locked" (another relay holds
+	// the channel) or "backpressure" (queued count is at the cap).
+	Skipped string
+}
+
+// PublishFunc publishes rows inside the relay transaction. A non-nil error rolls it back.
+type PublishFunc func(ctx context.Context, rows []domain.Notification) error
+
+// DeliveryOutcome is the result of one provider call, applied atomically with its attempt row.
+type DeliveryOutcome struct {
+	NotificationID    string
+	Attempt           domain.Attempt
+	To                domain.Status // sent, retrying or failed
+	NextAttemptAt     time.Time     // for retrying
+	ProviderMessageID *string       // for sent
+	LastError         *string
+	At                time.Time
+}
+
+// Deferral is a breaker-open deferral: sending → retrying with no attempt consumed, or
+// sending → failed (provider_unavailable) once the maximum deferral age has passed.
+type Deferral struct {
+	NotificationID string
+	NextAttemptAt  time.Time
+	Fail           bool
+	LastError      *string
+	At             time.Time
+}
+
+// BacklogCount is one row of the backlog gauge (FR-031).
+type BacklogCount struct {
+	Channel  domain.Channel
+	Priority domain.Priority
+	Status   domain.Status
+	Count    int
+}
+
+// NotificationRepository persists notifications. Every state change is a guarded update; a
+// rejected transition returns domain.ErrInvalidTransition or reports ok=false, never a silent
+// no-op (Constitution III).
+type NotificationRepository interface {
+	// Create inserts n. On an idempotency-key conflict it returns the existing row with
+	// created=false; the caller compares payload hashes.
+	Create(ctx context.Context, n *domain.Notification) (stored *domain.Notification, created bool, err error)
+	Get(ctx context.Context, id string) (*domain.Notification, error)
+	ListAttempts(ctx context.Context, id string) ([]domain.Attempt, error)
+	List(ctx context.Context, f ListFilter) ([]domain.Notification, error)
+
+	// Cancel moves a cancellable notification to cancelled. When nothing changed it returns the
+	// current row and changed=false.
+	Cancel(ctx context.Context, id string, at time.Time) (n *domain.Notification, changed bool, err error)
+
+	// RelayTx runs one channel's relay pass in a single transaction (research R4): advisory lock,
+	// backpressure quota, pick due rows, mark queued, publish, commit or roll back.
+	RelayTx(ctx context.Context, ch domain.Channel, maxInflight, batch int, at time.Time, publish PublishFunc) (RelayResult, error)
+	// StartSending is the guarded queued → sending claim; ok=false means drop the message.
+	StartSending(ctx context.Context, id string, at time.Time) (n *domain.Notification, ok bool, err error)
+	ApplyOutcome(ctx context.Context, o DeliveryOutcome) error
+	DeferSending(ctx context.Context, d Deferral) error
+
+	// ReapStaleSending recovers rows stuck in sending since before olderThan (research R5).
+	ReapStaleSending(ctx context.Context, olderThan, at time.Time, limit int) ([]domain.Notification, error)
+	// RepublishStaleQueued republishes rows stuck in queued without changing their status.
+	RepublishStaleQueued(ctx context.Context, olderThan, at time.Time, limit int, publish PublishFunc) (int, error)
+
+	BacklogCounts(ctx context.Context) ([]BacklogCount, error)
+}
+
+// BatchCounts are status totals for one batch.
+type BatchCounts map[domain.Status]int
+
+// BatchCancelResult reports a batch cancel (FR-015).
+type BatchCancelResult struct {
+	Cancelled        int
+	AlreadyCancelled int
+	NotCancellable   int
+}
+
+// BatchRepository persists batches and their notifications.
+type BatchRepository interface {
+	// CreateBatch inserts the batch and its accepted items in one transaction. For each item it
+	// returns the stored row and whether it was newly created (idempotent items may resolve to
+	// existing rows).
+	CreateBatch(ctx context.Context, b domain.Batch, items []*domain.Notification) (stored []*domain.Notification, created []bool, err error)
+	GetBatch(ctx context.Context, id string) (*domain.Batch, BatchCounts, []domain.Notification, error)
+	CancelBatch(ctx context.Context, id string, at time.Time) (BatchCancelResult, error)
+}
+
+// TemplateRepository persists templates (US8).
+type TemplateRepository interface {
+	CreateTemplate(ctx context.Context, t domain.Template) (*domain.Template, error)
+	GetTemplate(ctx context.Context, id string) (*domain.Template, error)
+	ListTemplates(ctx context.Context) ([]domain.Template, error)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Messaging and delivery
+// ---------------------------------------------------------------------------------------------
+
+// Message is the work item on the broker (contracts/events.md §1). The DB row is authoritative,
+// so content isn't copied into it.
+type Message struct {
+	NotificationID string
+	Channel        domain.Channel
+	Priority       domain.Priority
+	CorrelationID  string
+	EnqueuedAt     time.Time
+}
+
+// Publisher sends work messages. Publish returns nil only after every message is confirmed.
+type Publisher interface {
+	Publish(ctx context.Context, msgs []Message) error
+}
+
+// ProviderRequest is what the external provider receives (contracts/provider.md).
+type ProviderRequest struct {
+	NotificationID string // sent as Idempotency-Key
+	CorrelationID  string
+	To             string
+	Channel        domain.Channel
+	Content        string
+}
+
+// ProviderResult is a classified provider response.
+type ProviderResult struct {
+	Outcome    domain.Outcome // success, transient or permanent
+	HTTPStatus *int           // nil for network errors and timeouts
+	MessageID  *string
+	RetryAfter time.Duration // 0 when absent
+	Error      string        // empty on success
+	Latency    time.Duration
+}
+
+// Provider calls the external notification provider.
+type Provider interface {
+	Send(ctx context.Context, req ProviderRequest) ProviderResult
+}
+
+// ErrBreakerOpen means the channel's circuit is open (or half-open and busy).
+var ErrBreakerOpen = errors.New("circuit breaker open")
+
+// BreakerOpenError carries how long until the breaker next allows a trial call.
+type BreakerOpenError struct {
+	Channel domain.Channel
+	RetryIn time.Duration
+}
+
+func (e *BreakerOpenError) Error() string {
+	return fmt.Sprintf("%s for %s, retry in %s", ErrBreakerOpen, e.Channel, e.RetryIn)
+}
+
+// Unwrap lets errors.Is(err, ErrBreakerOpen) match.
+func (e *BreakerOpenError) Unwrap() error { return ErrBreakerOpen }
+
+// CircuitBreaker guards provider calls per channel (FR-024).
+type CircuitBreaker interface {
+	// Allow reports, without calling the provider, whether a call may proceed now. When it can't,
+	// it returns a *BreakerOpenError.
+	Allow(ch domain.Channel) error
+	// Call runs fn through the channel's breaker. When the breaker rejects the call, fn isn't run
+	// and the error is a *BreakerOpenError.
+	Call(ctx context.Context, ch domain.Channel, fn func(context.Context) ProviderResult) (ProviderResult, error)
+}
+
+// RateLimiter grants delivery permits per channel across all workers (FR-016). Acquire blocks
+// until a permit is granted or ctx ends; callers bound it with LIMITER_MAX_WAIT.
+type RateLimiter interface {
+	Acquire(ctx context.Context, ch domain.Channel) error
+}
+
+// ---------------------------------------------------------------------------------------------
+// Events and metrics
+// ---------------------------------------------------------------------------------------------
+
+// StatusEvent is a committed status change (contracts/events.md §2).
+type StatusEvent struct {
+	NotificationID string
+	BatchID        *string
+	From           *domain.Status // nil on create
+	To             domain.Status
+	Attempts       int
+	At             time.Time
+	CorrelationID  string
+}
+
+// StatusBroadcaster publishes status events after commit. Delivery is best-effort: an error is
+// logged and never fails the use case.
+type StatusBroadcaster interface {
+	Broadcast(ctx context.Context, ev StatusEvent) error
+}
+
+// Dead-letter reasons (notifications_dead_lettered_total{reason}).
+const (
+	ReasonExhausted           = "exhausted"
+	ReasonPermanent           = "permanent"
+	ReasonProviderUnavailable = "provider_unavailable"
+)
+
+// MetricsRecorder receives application-level measurements, so use cases don't depend on
+// Prometheus (contracts/observability.md).
+type MetricsRecorder interface {
+	Delivered(ch domain.Channel, outcome domain.Outcome, providerLatency time.Duration)
+	Retried(ch domain.Channel)
+	DeadLettered(ch domain.Channel, reason string)
+	EndToEnd(ch domain.Channel, p domain.Priority, latency time.Duration)
+	LimiterWait(ch domain.Channel, wait time.Duration)
+	LimiterTimeout(ch domain.Channel)
+	RelayPublished(ch domain.Channel, n int)
+	RelaySkipped(ch domain.Channel)
+	Reaped(kind string, n int)
+	Backlog(counts []BacklogCount)
+}
