@@ -553,7 +553,7 @@ items not early (quickstart #11).
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T071 [P] [US4] Write unit tests for the batch use case in `internal/app/batch_test.go`:
+- [X] T071 [P] [US4] Write unit tests for the batch use case in `internal/app/batch_test.go`:
   - per-item validation, results in request order
   - all invalid → `ValidationError` with `items[i].field` paths and no repository call
   - 0 or 1,001 items → error
