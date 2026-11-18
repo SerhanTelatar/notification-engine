@@ -60,7 +60,7 @@ green.
   - create `oapi-codegen.yaml` (chi server, strict server, models; exclude tags `realtime` and
     `ops-raw`, R15)
   - run `make gen` to produce `internal/adapters/http/gen/api.gen.go`
-- [ ] T007 [P] Create `sqlc.yaml`: engine postgresql, schema `migrations/`, queries
+- [X] T007 [P] Create `sqlc.yaml`: engine postgresql, schema `migrations/`, queries
   `sql/queries/`, `sql_package: pgx/v5`, output `internal/adapters/postgres/sqlcgen` (R13).
 - [ ] T008 Create `docker-compose.yml`:
   - postgres:16, rabbitmq:3.13-management and redis:7, each with a healthcheck
