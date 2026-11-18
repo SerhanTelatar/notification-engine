@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/platform/logger"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/metrics"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/shutdown"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/tracing"
 )
 
 func main() {
@@ -64,13 +66,18 @@ func run(ctx context.Context) error {
 
 	reg := metrics.NewRegistry()
 	m := metrics.NewWorker(reg)
+	tr, err := tracing.New(ctx, cfg.OTLPEndpoint, "notification-engine-worker") // no-op without an endpoint
+	if err != nil {
+		return err
+	}
+	defer flushTraces(log, tr)
 
 	// --- Adapters -----------------------------------------------------------------------------
 	repo := postgres.NewNotificationRepo(pool)
 	providerClient := provider.NewClient(cfg.ProviderURL, cfg.ProviderTimeout,
 		func(ch domain.Channel, o domain.Outcome, d time.Duration) {
 			m.ProviderDuration.WithLabelValues(string(ch), string(o)).Observe(d.Seconds())
-		})
+		}, provider.WithTracing(tr))
 	clock, ids := noop.Clock{}, noop.UUIDv7{}
 	// Shared across every worker: at most RATE_LIMIT_PER_SECOND deliveries per channel (FR-016).
 	limiter := redisadapter.NewRateLimiter(rdb, cfg.RateLimitPerSecond, cfg.RateLimitHeadroom)
@@ -96,7 +103,7 @@ func run(ctx context.Context) error {
 		return func(err error) { log.ErrorContext(ctx, "tick failed", "component", component, "error", err) }
 	}
 	session := func(sctx context.Context, conn *amqp.Connection) error {
-		publisher := rabbitmq.NewPublisher(conn, rabbitmq.DefaultPublishTimeout)
+		publisher := rabbitmq.NewPublisher(conn, rabbitmq.DefaultPublishTimeout, rabbitmq.WithTracing(tr))
 		defer publisher.Close()
 		relay := app.NewRelay(app.RelayDeps{
 			Repo: repo, Publisher: publisher, Events: events, Metrics: recorder, Clock: clock, IDs: ids,
@@ -115,7 +122,7 @@ func run(ctx context.Context) error {
 			shutdown.Every("sampler", app.SampleInterval, sampler.Tick, logTickError("sampler")),
 		}
 		for _, ch := range domain.Channels {
-			c := rabbitmq.NewConsumer(conn, ch, cfg.ConsumerConcurrencyPerChannel, deliverer.Handle, log)
+			c := rabbitmq.NewConsumer(conn, ch, cfg.ConsumerConcurrencyPerChannel, deliverer.Handle, log, rabbitmq.WithTracing(tr))
 			components = append(components, shutdown.Component{Name: "consumer-" + string(ch), Run: c.Run})
 		}
 		return shutdown.Run(sctx, log, cfg.ShutdownTimeout, components...)
@@ -154,5 +161,14 @@ func newOpsServer(addr string, checker *health.Checker, g prometheus.Gatherer) *
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
+	}
+}
+
+// flushTraces exports any buffered spans before the process exits.
+func flushTraces(log *slog.Logger, tr *tracing.Tracing) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := tr.Shutdown(ctx); err != nil {
+		log.WarnContext(ctx, "flushing traces failed", "error", err)
 	}
 }

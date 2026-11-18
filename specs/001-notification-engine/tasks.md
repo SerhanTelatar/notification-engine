@@ -920,7 +920,7 @@ including transitions made by the worker.
   - `internal/app/summary.go`
   - the `getMetricsSummary` handler in `internal/adapters/http/ops.go`
   - an integration test in `test/integration/summary_test.go`
-- [ ] T117 [P] Implement OpenTelemetry tracing:
+- [X] T117 [P] Implement OpenTelemetry tracing:
   - `internal/platform/tracing/tracing.go`: OTLP exporter, a no-op when
     `OTEL_EXPORTER_OTLP_ENDPOINT` is empty
   - otelhttp on the router and the provider client

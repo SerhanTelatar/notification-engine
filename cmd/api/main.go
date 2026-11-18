@@ -27,6 +27,7 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/metrics"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/shutdown"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/tracing"
 )
 
 func main() {
@@ -69,6 +70,11 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 
 	reg := metrics.NewRegistry()
 	apiMetrics := metrics.NewAPI(reg)
+	tr, err := tracing.New(ctx, cfg.OTLPEndpoint, "notification-engine-api") // no-op without an endpoint
+	if err != nil {
+		return err
+	}
+	defer flushTraces(log, tr)
 
 	// Redis carries live status events only (US9); without it the API stays ready but degraded.
 	rdb := goredis.NewClient(&goredis.Options{
@@ -98,7 +104,7 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 		Batcher:   batcher,
 		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(pool),
 			Events: events, Clock: noop.Clock{}, Log: log}),
-		Metrics: apiMetrics}), httpapi.WithMetrics(apiMetrics))
+		Metrics: apiMetrics}), httpapi.WithMetrics(apiMetrics), httpapi.WithTracing(tr))
 	httpapi.MountOps(router, reg, api.Spec)
 	httpapi.MountWS(router, httpapi.WSDeps{Hub: hub, Query: query, Batches: batcher, Metrics: apiMetrics,
 		Log: log.With("component", "ws")})
@@ -117,4 +123,13 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	)
 	log.InfoContext(context.WithoutCancel(ctx), "api stopped")
 	return err
+}
+
+// flushTraces exports any buffered spans before the process exits.
+func flushTraces(log *slog.Logger, tr *tracing.Tracing) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := tr.Shutdown(ctx); err != nil {
+		log.WarnContext(ctx, "flushing traces failed", "error", err)
+	}
 }
