@@ -734,7 +734,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   `data-model.md notifications.last_error` to `provider_unavailable` and
   `data-model.md notifications.failed_at`; the consumer then dead-letters the message.
   Wire the breaker in `cmd/worker/main.go` in place of the noop. Makes T087 and T088 pass.
-- [ ] T094 [US7] Instrument the metrics:
+- [X] T094 [US7] Instrument the metrics:
   - API: an HTTP metrics middleware in `internal/adapters/http/middleware.go`
     (`http_request_duration_seconds` with the chi route pattern); `notifications_created_total` /
     `notifications_rejected_total` in the create and batch handlers

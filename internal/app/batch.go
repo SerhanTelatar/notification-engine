@@ -60,7 +60,8 @@ type Batcher struct{ d BatcherDeps }
 // NewBatcher returns the batch use cases.
 func NewBatcher(d BatcherDeps) *Batcher { return &Batcher{d: d} }
 
-const keyConflictMessage = "already used with a different payload"
+// KeyConflictMessage is the item error for an idempotency key reused with a different payload.
+const KeyConflictMessage = "already used with a different payload"
 
 // CreateBatch validates every item on its own and stores the valid ones as one batch (partial
 // success, FR-008). If no item is valid, nothing is stored and the error lists every item's
@@ -102,7 +103,7 @@ func (b *Batcher) CreateBatch(ctx context.Context, req BatchRequest) (BatchResul
 				if bytes.Equal(candidates[pos].PayloadHash, n.PayloadHash) {
 					aliasOf[i] = pos // same request twice in one batch: one notification
 				} else {
-					reject(i, []domain.FieldError{{Field: "idempotency_key", Message: keyConflictMessage + " earlier in this batch"}})
+					reject(i, []domain.FieldError{{Field: "idempotency_key", Message: KeyConflictMessage + " earlier in this batch"}})
 				}
 				continue
 			}
@@ -131,7 +132,7 @@ func (b *Batcher) CreateBatch(ctx context.Context, req BatchRequest) (BatchResul
 		case ports.BatchItemReplayed:
 			results[i] = BatchItemResult{Index: i, Accepted: true, Replayed: true, Notification: o.Stored}
 		case ports.BatchItemConflict:
-			results[i] = BatchItemResult{Index: i, Errors: []domain.FieldError{{Field: "idempotency_key", Message: keyConflictMessage}}}
+			results[i] = BatchItemResult{Index: i, Errors: []domain.FieldError{{Field: "idempotency_key", Message: KeyConflictMessage}}}
 		}
 	}
 	for i, pos := range aliasOf {

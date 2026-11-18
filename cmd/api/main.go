@@ -63,7 +63,7 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 	defer pool.Close() // after the HTTP server has drained
 
 	reg := metrics.NewRegistry()
-	_ = metrics.NewAPI(reg) // instrumented in US1/US7
+	apiMetrics := metrics.NewAPI(reg)
 
 	checker := health.New(health.DefaultTimeout).
 		Require("postgres", postgres.Ping(pool))
@@ -79,7 +79,8 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(pool), IDs: noop.UUIDv7{}, Clock: noop.Clock{},
 			Events: noop.Broadcaster{}, Log: log, MaxAttempts: cfg.MaxAttempts}),
 		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(pool),
-			Events: noop.Broadcaster{}, Clock: noop.Clock{}, Log: log})}))
+			Events: noop.Broadcaster{}, Clock: noop.Clock{}, Log: log}),
+		Metrics: apiMetrics}), httpapi.WithMetrics(apiMetrics))
 	httpapi.MountOps(router, reg, api.Spec)
 	srv := httpapi.NewHTTPServer(cfg.HTTPAddr, router)
 

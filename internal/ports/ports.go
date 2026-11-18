@@ -332,4 +332,10 @@ type MetricsRecorder interface {
 	RelaySkipped(ch domain.Channel)
 	Reaped(kind string, n int)
 	Backlog(counts []BacklogCount)
+	QueueDepth(queue string, n int)
+}
+
+// QueueInspector reports broker-side queue depths (a secondary signal next to the DB backlog).
+type QueueInspector interface {
+	Depths(ctx context.Context) (map[string]int, error)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/http/gen"
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/metrics"
 )
 
 // Server timeouts and limits (research R15).
@@ -40,29 +41,40 @@ type Deps struct {
 	Query     *app.Query
 	Batcher   *app.Batcher
 	Canceller *app.Canceller
+	// Metrics, when set, counts created and rejected notifications.
+	Metrics *metrics.API
 }
 
 // Server implements gen.StrictServerInterface. Operations not built yet return errNotImplemented.
 type Server struct {
-	log    *slog.Logger
-	health *health.Checker
-	create *app.Creator
-	query  *app.Query
-	batch  *app.Batcher
-	cancel *app.Canceller
+	log     *slog.Logger
+	health  *health.Checker
+	create  *app.Creator
+	query   *app.Query
+	batch   *app.Batcher
+	cancel  *app.Canceller
+	metrics *metrics.API
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
 // NewServer returns the strict-server implementation.
 func NewServer(d Deps) *Server {
-	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher, cancel: d.Canceller}
+	return &Server{log: d.Log, health: d.Health, create: d.Creator, query: d.Query, batch: d.Batcher, cancel: d.Canceller, metrics: d.Metrics}
 }
 
 // NewRouter mounts the generated routes on chi.
-func NewRouter(log *slog.Logger, s gen.StrictServerInterface) chi.Router {
+func NewRouter(log *slog.Logger, s gen.StrictServerInterface, opts ...RouterOption) chi.Router {
+	var cfg routerConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	r := chi.NewRouter()
-	r.Use(Recover(log), CorrelationID, AccessLog(log), Timeout(RequestTimeout))
+	r.Use(Recover(log), CorrelationID, AccessLog(log))
+	if cfg.metrics != nil {
+		r.Use(RequestMetrics(cfg.metrics))
+	}
+	r.Use(Timeout(RequestTimeout))
 	strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler(log),
 		ResponseErrorHandlerFunc: responseErrorHandler(log),

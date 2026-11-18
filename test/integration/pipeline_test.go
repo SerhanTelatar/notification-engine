@@ -293,3 +293,4 @@ func (m *countingMetrics) RelayPublished(_ domain.Channel, n int)               
 func (m *countingMetrics) RelaySkipped(domain.Channel)                             { m.add("relay_skipped", 1) }
 func (m *countingMetrics) Reaped(kind string, n int)                               { m.add("reaped:"+kind, n) }
 func (m *countingMetrics) Backlog([]ports.BacklogCount)                            {}
+func (m *countingMetrics) QueueDepth(string, int)                                  {}

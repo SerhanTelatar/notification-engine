@@ -27,8 +27,10 @@ func (s *Server) CreateBatch(ctx context.Context, req gen.CreateBatchRequestObje
 	}
 	res, err := s.batch.CreateBatch(ctx, app.BatchRequest{Items: items, CorrelationID: cid})
 	if err != nil {
+		s.countRejected(err)
 		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler
 	}
+	s.countBatch(res.Items)
 
 	out := gen.BatchCreateResult{BatchId: parseUUID(res.BatchID), Accepted: res.Accepted, Rejected: res.Rejected,
 		Items: make([]gen.BatchItemResult, len(res.Items))}

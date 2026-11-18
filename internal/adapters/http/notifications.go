@@ -25,12 +25,17 @@ func (s *Server) CreateNotification(ctx context.Context, req gen.CreateNotificat
 	b := req.Body
 	key, err := mergeIdempotencyKey(req.Params.IdempotencyKey, b.IdempotencyKey)
 	if err != nil {
+		s.countRejected(err)
 		return nil, err
 	}
 
 	res, err := s.create.Create(ctx, fromAPIRequest(b, key, logger.CorrelationID(ctx)))
 	if err != nil {
+		s.countRejected(err)
 		return nil, err //nolint:wrapcheck // domain errors are mapped to the contract by the error handler
+	}
+	if !res.Replayed {
+		s.countCreated(res.Notification)
 	}
 	cid := logger.CorrelationID(ctx)
 	headers := gen.CreateNotification202ResponseHeaders{XCorrelationID: &cid}

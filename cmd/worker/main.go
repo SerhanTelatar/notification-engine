@@ -90,9 +90,9 @@ func run(ctx context.Context) error {
 	breaker := provider.NewBreakers(cfg.BreakerConsecutiveFailures, cfg.BreakerCooldown, func(ch domain.Channel, state int) {
 		m.BreakerState.WithLabelValues(string(ch)).Set(float64(state))
 	})
-	// Pass-throughs until their stories: the Prometheus recorder (US7, T094), the Redis
-	// broadcaster (US9).
-	events, recorder := noop.Broadcaster{}, noop.Recorder{}
+	recorder := metrics.NewRecorder(m)
+	// Pass-through until US9 adds the Redis broadcaster.
+	events := noop.Broadcaster{}
 
 	// --- Use cases ----------------------------------------------------------------------------
 	deliverer := app.NewDeliverer(app.DelivererDeps{

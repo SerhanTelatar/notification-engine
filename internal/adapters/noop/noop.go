@@ -61,6 +61,7 @@ func (Recorder) RelayPublished(domain.Channel, int)                      {}
 func (Recorder) RelaySkipped(domain.Channel)                             {}
 func (Recorder) Reaped(string, int)                                      {}
 func (Recorder) Backlog([]ports.BacklogCount)                            {}
+func (Recorder) QueueDepth(string, int)                                  {}
 
 // Clock is the system clock in UTC.
 type Clock struct{}
