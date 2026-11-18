@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/logger"
 )
 
@@ -68,7 +69,7 @@ func TestInternalErrorsAreLoggedNotLeaked(t *testing.T) {
 }
 
 func TestRequestErrorsThroughRouter(t *testing.T) {
-	h := NewRouter(quiet, NewServer(quiet))
+	h := NewRouter(quiet, NewServer(quiet, health.New(0)))
 	tests := []struct {
 		name, method, path, body string
 		wantField                string

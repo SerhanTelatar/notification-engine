@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/logger"
 )
 
@@ -107,7 +108,7 @@ func TestTimeoutSetsDeadline(t *testing.T) {
 }
 
 func TestRouterAppliesMiddleware(t *testing.T) {
-	h := NewRouter(quiet, NewServer(quiet))
+	h := NewRouter(quiet, NewServer(quiet, health.New(0)))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/templates", nil))
 	if rec.Header().Get(HeaderCorrelationID) == "" {

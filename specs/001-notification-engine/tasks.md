@@ -248,7 +248,7 @@ needs.
   - log the wrapped error and never put it in the response body (Constitution VIII)
   - request-decoding errors also map to `validation_failed`
   - tests in `internal/adapters/http/errors_test.go`
-- [ ] T032 [P] Implement the hand-mounted ops routes in `internal/adapters/http/ops.go`:
+- [X] T032 [P] Implement the hand-mounted ops routes in `internal/adapters/http/ops.go`:
   - `/healthz` and `/readyz` using `platform/health`
   - `/metrics` via promhttp on the injected registry
   - `/swagger` (embedded HTML, Swagger UI from a pinned CDN version) and `/openapi.yaml`

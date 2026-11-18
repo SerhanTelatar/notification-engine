@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/http/gen"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
 )
 
 // Server timeouts and limits (research R15).
@@ -31,13 +32,16 @@ var errNotImplemented = errors.New("operation not implemented yet")
 
 // Server implements gen.StrictServerInterface. Operations not built yet return errNotImplemented.
 type Server struct {
-	log *slog.Logger
+	log    *slog.Logger
+	health *health.Checker
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
-// NewServer returns the strict-server implementation.
-func NewServer(log *slog.Logger) *Server { return &Server{log: log} }
+// NewServer returns the strict-server implementation. checker backs /readyz.
+func NewServer(log *slog.Logger, checker *health.Checker) *Server {
+	return &Server{log: log, health: checker}
+}
 
 // NewRouter mounts the generated routes on chi.
 func NewRouter(log *slog.Logger, s gen.StrictServerInterface) chi.Router {
@@ -109,13 +113,5 @@ func (s *Server) GetTemplate(context.Context, gen.GetTemplateRequestObject) (gen
 }
 
 func (s *Server) GetMetricsSummary(context.Context, gen.GetMetricsSummaryRequestObject) (gen.GetMetricsSummaryResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) GetLiveness(context.Context, gen.GetLivenessRequestObject) (gen.GetLivenessResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (s *Server) GetReadiness(context.Context, gen.GetReadinessRequestObject) (gen.GetReadinessResponseObject, error) {
 	return nil, errNotImplemented
 }
