@@ -94,7 +94,7 @@ needs.
   - durations parsed with `time.ParseDuration`
   - startup validation that returns all errors at once
   - table-driven tests in `internal/platform/config/config_test.go`
-- [ ] T014 [P] Implement the slog JSON logger in `internal/platform/logger/logger.go`:
+- [X] T014 [P] Implement the slog JSON logger in `internal/platform/logger/logger.go`:
   - `New(service, level)`, `WithCorrelationID(ctx, id)`, `CorrelationID(ctx)`, `From(ctx)`
   - `From(ctx)` adds `correlation_id`, `notification_id` and `batch_id` when they're in ctx
   - fields per `contracts/observability.md` § Logs
