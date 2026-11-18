@@ -342,7 +342,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - a 2xx with an unparsable body → `sent` with a null message id
   - 20 concurrent creates with the same idempotency key → after draining, the mock received
     exactly 1 call (SC-005)
-- [ ] T044 [P] [US1] Write the relay integration tests in `test/integration/relay_test.go`:
+- [X] T044 [P] [US1] Write the relay integration tests in `test/integration/relay_test.go`:
   - a publish that isn't confirmed (exchange deleted) → tx rolled back, rows still `pending`
   - backpressure: 5,000 SMS with `RELAY_MAX_INFLIGHT_PER_CHANNEL=1000` and 2 relays. The
     sampled sms `queued` count is never above 1000, the whole burst is delivered,
