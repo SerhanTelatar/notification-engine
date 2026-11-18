@@ -758,7 +758,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   - make sure the recipient and content are never logged
   - files: `cmd/api/main.go`, `cmd/worker/main.go`, `internal/app/deliver.go`
   - makes T089 and T090 pass
-- [ ] T097 [P] [US7] Write `specs/adr/0005-retry-backoff-and-circuit-breaker.md` from R9,
+- [X] T097 [P] [US7] Write `specs/adr/0005-retry-backoff-and-circuit-breaker.md` from R9,
   including the per-process breaker trade-off.
 
 **Checkpoint**: all required stories (US1–US7) are done, including the `BREAKER_MAX_DEFER_AGE`
