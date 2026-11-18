@@ -211,7 +211,7 @@ needs.
     `notifications_inflight_idx` `(channel, status, updated_at)` partial,
     `notifications_backlog_idx`, `notifications_list_idx`, `notifications_list_filtered_idx`,
     `notifications_batch_idx`
-- [ ] T026 Embed the migrations and add the migrate subcommand:
+- [X] T026 Embed the migrations and add the migrate subcommand:
   - `migrations/embed.go` (package `migrations`, `embed.FS`)
   - `cmd/api/migrate.go`, a goose provider implementing `api migrate up|down|status`
   - depends on T025
