@@ -179,6 +179,27 @@ type BatchRepository interface {
 	CancelBatch(ctx context.Context, id string, at time.Time) (BatchCancelResult, error)
 }
 
+// Percentiles are latency percentiles in milliseconds.
+type Percentiles struct{ P50, P95, P99 float64 }
+
+// ChannelStats is one channel's activity over a recent window (metrics summary, R16).
+type ChannelStats struct {
+	Channel   domain.Channel
+	Sent      int          // notifications sent in the window
+	Failed    int          // notifications that failed in the window
+	Retried   int          // attempts in the window that led to a retry
+	Attempts  int          // provider calls finished in the window
+	Successes int          // of which successful
+	E2E       *Percentiles // nil when nothing was sent
+	Provider  *Percentiles // nil when no provider call finished
+}
+
+// SummaryRepository computes the metrics summary from the database (bonus, T116).
+type SummaryRepository interface {
+	BacklogCounts(ctx context.Context) ([]BacklogCount, error)
+	ChannelStats(ctx context.Context, since time.Time) ([]ChannelStats, error)
+}
+
 // TemplateRepository persists templates (US8).
 type TemplateRepository interface {
 	CreateTemplate(ctx context.Context, t domain.Template) (*domain.Template, error)

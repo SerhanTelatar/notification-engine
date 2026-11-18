@@ -10,6 +10,7 @@ import (
 
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/http/gen"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
+	"github.com/SerhanTelatar/notification-engine/internal/ports"
 )
 
 // GetLiveness reports that the process is up; it never touches dependencies.
@@ -72,3 +73,35 @@ const swaggerHTML = `<!doctype html>
 </body>
 </html>
 `
+
+// GetMetricsSummary returns the backlog and each channel's last 5 minutes, computed from the
+// database (bonus, T116, research R16).
+func (s *Server) GetMetricsSummary(ctx context.Context, _ gen.GetMetricsSummaryRequestObject) (gen.GetMetricsSummaryResponseObject, error) {
+	if s.summary == nil {
+		return nil, errNotImplemented
+	}
+	sum, err := s.summary.Get(ctx)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // mapped to a 500 by the error handler
+	}
+	out := gen.GetMetricsSummary200JSONResponse{WindowSeconds: sum.WindowSeconds,
+		Backlog:  make([]gen.SummaryBacklogEntry, len(sum.Backlog)),
+		Channels: make([]gen.SummaryChannel, len(sum.Channels))}
+	for i, b := range sum.Backlog {
+		out.Backlog[i] = gen.SummaryBacklogEntry{Channel: gen.Channel(b.Channel), Priority: gen.Priority(b.Priority.String()),
+			Status: gen.Status(b.Status), Count: b.Count}
+	}
+	for i, c := range sum.Channels {
+		out.Channels[i] = gen.SummaryChannel{Channel: gen.Channel(c.Channel), Sent: c.Sent, Failed: c.Failed, Retried: c.Retried,
+			SuccessRate: c.SuccessRate, E2eLatencyMs: toAPIPercentiles(c.E2ELatencyMs), ProviderLatencyMs: toAPIPercentiles(c.ProviderLatencyMs)}
+	}
+	return out, nil
+}
+
+func toAPIPercentiles(p *ports.Percentiles) *gen.Percentiles {
+	if p == nil {
+		return nil
+	}
+	p50, p95, p99 := float32(p.P50), float32(p.P95), float32(p.P99)
+	return &gen.Percentiles{P50: &p50, P95: &p95, P99: &p99}
+}

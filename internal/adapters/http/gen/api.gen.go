@@ -285,21 +285,8 @@ type HealthStatus string
 
 // MetricsSummary defines model for MetricsSummary.
 type MetricsSummary struct {
-	Backlog []struct {
-		Channel  *Channel  `json:"channel,omitempty"`
-		Count    *int      `json:"count,omitempty"`
-		Priority *Priority `json:"priority,omitempty"`
-		Status   *Status   `json:"status,omitempty"`
-	} `json:"backlog"`
-	Channels []struct {
-		Channel           *Channel     `json:"channel,omitempty"`
-		E2eLatencyMs      *Percentiles `json:"e2e_latency_ms,omitempty"`
-		Failed            *int         `json:"failed,omitempty"`
-		ProviderLatencyMs *Percentiles `json:"provider_latency_ms,omitempty"`
-		Retried           *int         `json:"retried,omitempty"`
-		Sent              *int         `json:"sent,omitempty"`
-		SuccessRate       *float64     `json:"success_rate,omitempty"`
-	} `json:"channels"`
+	Backlog  []SummaryBacklogEntry `json:"backlog"`
+	Channels []SummaryChannel      `json:"channels"`
 
 	// WindowSeconds Example: 300
 	WindowSeconds int `json:"window_seconds"`
@@ -387,6 +374,27 @@ type Priority string
 
 // Status defines model for Status.
 type Status string
+
+// SummaryBacklogEntry Non-terminal notifications right now, by channel, priority and status.
+type SummaryBacklogEntry struct {
+	Channel  Channel  `json:"channel"`
+	Count    int      `json:"count"`
+	Priority Priority `json:"priority"`
+	Status   Status   `json:"status"`
+}
+
+// SummaryChannel One channel over the window. success_rate is successful provider calls over finished calls; it and the latency percentiles are absent when there is nothing to measure.
+type SummaryChannel struct {
+	Channel           Channel      `json:"channel"`
+	E2eLatencyMs      *Percentiles `json:"e2e_latency_ms,omitempty"`
+	Failed            int          `json:"failed"`
+	ProviderLatencyMs *Percentiles `json:"provider_latency_ms,omitempty"`
+
+	// Retried Provider calls that led to a retry.
+	Retried     int      `json:"retried"`
+	Sent        int      `json:"sent"`
+	SuccessRate *float64 `json:"success_rate,omitempty"`
+}
 
 // Template defines model for Template.
 type Template struct {

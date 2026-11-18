@@ -913,7 +913,7 @@ including transitions made by the worker.
 
 ## Phase 13: Polish & Cross-Cutting Concerns (bonus)
 
-- [ ] T116 [P] Implement `GET /api/v1/metrics/summary`:
+- [X] T116 [P] Implement `GET /api/v1/metrics/summary`:
   - summary queries in `sql/queries/summary.sql`: backlog; sent/failed/retried over the last
     5 min; `percentile_cont` p50/p95/p99 for e2e latency from `notifications` and provider latency
     from `notification_attempts` (`data-model.md notification_attempts.latency_ms`)
