@@ -290,7 +290,7 @@ the DLQ. Kill the worker mid-flight and see nothing lost (quickstart #1–5, #13
   - classification: 2xx success; 429/5xx/timeout/network transient; other 4xx/1xx/3xx permanent
   - full-jitter bounds per attempt, the 5 min cap, the Retry-After floor (seconds and HTTP-date),
     and the max-attempts cut-off (R9)
-- [ ] T037 [P] [US1] Write unit tests for the create use case in `internal/app/create_test.go`:
+- [X] T037 [P] [US1] Write unit tests for the create use case in `internal/app/create_test.go`:
   - valid → 202 data with `pending`
   - scheduled-in-future → `scheduled`
   - validation errors collect every field
