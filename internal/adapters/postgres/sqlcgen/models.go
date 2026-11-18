@@ -55,3 +55,11 @@ type NotificationAttempt struct {
 	Outcome        string
 	Error          *string
 }
+
+type Template struct {
+	ID        uuid.UUID
+	Name      string
+	Body      string
+	Variables []string
+	CreatedAt time.Time
+}

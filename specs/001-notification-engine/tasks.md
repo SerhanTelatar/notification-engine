@@ -851,7 +851,7 @@ delivers the rendered text; sending without `Code` → 400 naming `Code` (quicks
   `text/template/parse` tree allowing only text and `.Field` actions (R12); `Variables()`;
   `Render(vars)` with `missingkey=error` that returns every missing name as a `ValidationError`.
   Makes T101 pass.
-- [ ] T106 [US8] Write `sql/queries/templates.sql` (`InsertTemplate`, `GetTemplate`,
+- [X] T106 [US8] Write `sql/queries/templates.sql` (`InsertTemplate`, `GetTemplate`,
   `ListTemplates`), run `make gen`, and implement
   `internal/adapters/postgres/template_repo.go` (unique violation →
   `domain.ErrTemplateNameTaken`).
