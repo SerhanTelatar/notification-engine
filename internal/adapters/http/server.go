@@ -44,16 +44,12 @@ func NewRouter(log *slog.Logger, s gen.StrictServerInterface) chi.Router {
 	r := chi.NewRouter()
 	r.Use(Recover(log), CorrelationID, AccessLog(log), Timeout(RequestTimeout))
 	strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
-		RequestErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
-			writeJSONError(w, http.StatusBadRequest, "validation_failed", err.Error())
-		},
+		RequestErrorHandlerFunc:  requestErrorHandler(log),
 		ResponseErrorHandlerFunc: responseErrorHandler(log),
 	})
 	gen.HandlerWithOptions(strict, gen.ChiServerOptions{
-		BaseRouter: r,
-		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
-			writeJSONError(w, http.StatusBadRequest, "validation_failed", err.Error())
-		},
+		BaseRouter:       r,
+		ErrorHandlerFunc: requestErrorHandler(log),
 	})
 	return r
 }
@@ -67,17 +63,6 @@ func NewHTTPServer(addr string, h http.Handler) *http.Server {
 		ReadTimeout:       ReadTimeout,
 		WriteTimeout:      WriteTimeout,
 		IdleTimeout:       IdleTimeout,
-	}
-}
-
-func responseErrorHandler(log *slog.Logger) func(http.ResponseWriter, *http.Request, error) {
-	return func(w http.ResponseWriter, r *http.Request, err error) {
-		if errors.Is(err, errNotImplemented) {
-			writeJSONError(w, http.StatusNotImplemented, "internal", "this operation is not implemented yet")
-			return
-		}
-		log.ErrorContext(r.Context(), "request failed", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "internal", "internal server error")
 	}
 }
 

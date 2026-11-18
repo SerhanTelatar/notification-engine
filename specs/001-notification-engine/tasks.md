@@ -241,7 +241,7 @@ needs.
   - access log with the route pattern
   - request timeout
   - tests in `internal/adapters/http/middleware_test.go`
-- [ ] T031 [P] Implement error mapping in `internal/adapters/http/errors.go`:
+- [X] T031 [P] Implement error mapping in `internal/adapters/http/errors.go`:
   - domain errors → `Error` schema (`validation_failed` 400, `not_found` 404,
     `idempotency_conflict` 409, `not_cancellable` 409 with `current_status`,
     `template_name_taken` 409, anything else `internal` 500)
