@@ -794,6 +794,17 @@ any bonus work.
 - [X] T120 Fix the gap found by T100 (quickstart #11): the worker published the fixed host port
   `9090:9090`, so `docker compose up --scale worker=2` failed to start the second replica. Publish
   a host port range (`9090-9099:9090`) so each replica gets its own ops port.
+- [X] T121 Write the integration test for broker-outage survival in
+  `test/integration/supervisor_test.go` (gap found by T100, quickstart #15 / US7-AS4): the worker
+  exited when RabbitMQ stopped, so `/healthz` and `/readyz` went down with it instead of
+  `/readyz` 503 and `/healthz` 200. Through a TCP proxy: cutting the broker makes the supervisor's
+  readiness check fail while it keeps running; restoring it starts a new session on a new
+  connection and readiness recovers; cancelling ctx stops it cleanly.
+- [ ] T122 Implement `internal/adapters/rabbitmq/supervisor.go`: dial and declare the topology,
+  run the AMQP-bound components (relay, reaper, sampler, consumers) as one session per connection,
+  and on connection loss cancel the session and redial with capped exponential backoff. Wire it in
+  `cmd/worker/main.go` with the ops server outside the session, and readiness from the
+  supervisor's current connection. Makes T121 pass.
 
 ---
 
