@@ -156,7 +156,7 @@ needs.
   `domain.Outcome`, HTTP status, message id and Retry-After), `RateLimiter`, `CircuitBreaker`,
   `StatusBroadcaster`, `MetricsRecorder` (delivery outcomes, retries, dead-letters, e2e latency,
   relay and reaper counters), `Clock`, `IDGenerator`. Every I/O method takes `ctx` first.
-- [ ] T024 [P] Implement pass-through adapters in `internal/adapters/noop/noop.go`: an
+- [X] T024 [P] Implement pass-through adapters in `internal/adapters/noop/noop.go`: an
   always-allow `RateLimiter`, an always-closed `CircuitBreaker`, a discarding
   `StatusBroadcaster`, a discarding `MetricsRecorder`, a system `Clock`, and a UUIDv7 `IDGenerator` (`data-model.md
   notifications.id`, `google/uuid`). They're used until US3, US7 and US9 replace them.
