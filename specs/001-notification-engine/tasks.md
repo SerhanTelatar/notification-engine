@@ -879,12 +879,12 @@ including transitions made by the worker.
 
 ### Tests for User Story 9 ⚠️
 
-- [ ] T110 [P] [US9] Write hub unit tests in `internal/adapters/ws/hub_test.go`:
+- [X] T110 [P] [US9] Write hub unit tests in `internal/adapters/ws/hub_test.go`:
   - fan-out by notification id and by batch id
   - unsubscribe on disconnect
   - a full 64-message buffer → the client is closed with 1008
   - shutdown closes with 1001
-- [ ] T111 [P] [US9] Write the WebSocket integration test in `test/integration/ws_test.go`:
+- [X] T111 [P] [US9] Write the WebSocket integration test in `test/integration/ws_test.go`:
   - unknown id → 404 before the upgrade; both or neither query params → 400
   - a notification subscription gets the snapshot, then `queued`, `sending`, `sent` published by
     the worker process within 1 s (SC-010)
@@ -892,21 +892,21 @@ including transitions made by the worker.
 
 ### Implementation for User Story 9
 
-- [ ] T112 [US9] Implement the Redis broadcaster and subscriber in
+- [X] T112 [US9] Implement the Redis broadcaster and subscriber in
   `internal/adapters/redis/status.go`: `ports.StatusBroadcaster` publishes to
   `notification-status` with the payload from `contracts/events.md` §2, best-effort with a
   timeout; `Subscribe(ctx)` returns a channel of events.
-- [ ] T113 [US9] Implement the hub in `internal/adapters/ws/hub.go` (indexes by notification and
+- [X] T113 [US9] Implement the hub in `internal/adapters/ws/hub.go` (indexes by notification and
   batch id, per-client bounded buffer) and the `/ws` handler in `internal/adapters/http/ws.go`:
   - validate params and existence (via `GetNotification`/`GetBatch`) before the upgrade
   - `coder/websocket` accept
   - send the snapshot, then 30 s pings with a 10 s pong timeout (`contracts/events.md` §3)
   - `ws_connections` gauge
   - makes T110 pass
-- [ ] T114 [US9] Replace the noop broadcaster with the Redis broadcaster in `cmd/api/main.go` and
+- [X] T114 [US9] Replace the noop broadcaster with the Redis broadcaster in `cmd/api/main.go` and
   `cmd/worker/main.go`. Start the subscriber → hub loop in the api and mount `/ws`; close clients
   on shutdown. Makes T111 pass.
-- [ ] T115 [P] [US9] Write `specs/adr/0007-realtime-fanout-via-redis-pubsub.md` from R11:
+- [X] T115 [P] [US9] Write `specs/adr/0007-realtime-fanout-via-redis-pubsub.md` from R11:
   best-effort delivery, snapshot on connect, alternatives (LISTEN/NOTIFY, RabbitMQ fanout).
 
 ---

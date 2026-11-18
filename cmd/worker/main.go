@@ -79,8 +79,8 @@ func run(ctx context.Context) error {
 		m.BreakerState.WithLabelValues(string(ch)).Set(float64(state))
 	})
 	recorder := metrics.NewRecorder(m)
-	// Pass-through until US9 adds the Redis broadcaster.
-	events := noop.Broadcaster{}
+	// Status changes go out on Redis pub/sub for the API's WebSocket clients (US9); best-effort.
+	events := redisadapter.NewStatusBus(rdb, log.With("component", "status"))
 
 	// --- Use cases ----------------------------------------------------------------------------
 	deliverer := app.NewDeliverer(app.DelivererDeps{

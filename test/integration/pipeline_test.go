@@ -37,12 +37,13 @@ type pipelineConfig struct {
 	queuedTimeout   time.Duration
 	backoffBase     time.Duration
 	backoffMax      time.Duration
-	limiter         ports.RateLimiter    // nil = pass-through
-	limiterMaxWait  time.Duration        // 0 = 1 s
-	sendOffset      time.Duration        // pacing after the claim; 0 = none
-	breaker         ports.CircuitBreaker // nil = pass-through
-	maxDeferAge     time.Duration        // BREAKER_MAX_DEFER_AGE; 0 = none
-	log             *slog.Logger         // nil = quiet
+	limiter         ports.RateLimiter       // nil = pass-through
+	limiterMaxWait  time.Duration           // 0 = 1 s
+	sendOffset      time.Duration           // pacing after the claim; 0 = none
+	breaker         ports.CircuitBreaker    // nil = pass-through
+	maxDeferAge     time.Duration           // BREAKER_MAX_DEFER_AGE; 0 = none
+	log             *slog.Logger            // nil = quiet
+	events          ports.StatusBroadcaster // nil = pass-through
 }
 
 func defaultPipeline(providerURL string) pipelineConfig {
@@ -113,6 +114,10 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 	if cfg.log != nil {
 		quietLog = cfg.log
 	}
+	var events ports.StatusBroadcaster = noop.Broadcaster{}
+	if cfg.events != nil {
+		events = cfg.events
+	}
 	conn, err := rabbitmq.Dial(env.AMQPURL, "test-worker")
 	if err != nil {
 		t.Fatal(err)
@@ -123,15 +128,15 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 	p := &pipeline{t: t, conn: conn, repo: postgres.NewNotificationRepo(env.Pool),
 		pub: rabbitmq.NewPublisher(conn, 0), metrics: newCountingMetrics()}
 	p.creator = app.NewCreator(app.CreatorDeps{Repo: p.repo, IDs: noop.UUIDv7{}, Clock: noop.Clock{},
-		Events: noop.Broadcaster{}, Log: quietLog, MaxAttempts: 5})
+		Events: events, Log: quietLog, MaxAttempts: 5})
 
 	deliverer := app.NewDeliverer(app.DelivererDeps{
 		Repo: p.repo, Provider: provider.NewClient(cfg.providerURL, cfg.providerTimeout, nil),
-		Breaker: breakerOrNoop(cfg.breaker), Limiter: limiterOrNoop(cfg.limiter), MaxDeferAge: cfg.maxDeferAge, Events: noop.Broadcaster{}, Metrics: p.metrics,
+		Breaker: breakerOrNoop(cfg.breaker), Limiter: limiterOrNoop(cfg.limiter), MaxDeferAge: cfg.maxDeferAge, Events: events, Metrics: p.metrics,
 		Clock: noop.Clock{}, Log: quietLog, BackoffBase: cfg.backoffBase, BackoffMax: cfg.backoffMax,
 		LimiterMaxWait: durationOr(cfg.limiterMaxWait, time.Second), SendOffset: cfg.sendOffset,
 	})
-	reaper := app.NewReaper(app.ReaperDeps{Repo: p.repo, Publisher: p.pub, Events: noop.Broadcaster{},
+	reaper := app.NewReaper(app.ReaperDeps{Repo: p.repo, Publisher: p.pub, Events: events,
 		Metrics: p.metrics, Clock: noop.Clock{}, Log: quietLog,
 		SendingTimeout: cfg.sendingTimeout, QueuedTimeout: cfg.queuedTimeout})
 
@@ -156,7 +161,7 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 		})
 	}
 	for range max(1, cfg.relays) {
-		relay := app.NewRelay(app.RelayDeps{Repo: p.repo, Publisher: p.pub, Events: noop.Broadcaster{},
+		relay := app.NewRelay(app.RelayDeps{Repo: p.repo, Publisher: p.pub, Events: events,
 			Metrics: p.metrics, Clock: noop.Clock{}, IDs: noop.UUIDv7{}, Log: quietLog,
 			MaxInflight: cfg.maxInflight, BatchSize: cfg.batch})
 		every(cfg.relayInterval, relay.Tick)

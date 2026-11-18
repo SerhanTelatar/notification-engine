@@ -21,6 +21,7 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/noop"
 	"github.com/SerhanTelatar/notification-engine/internal/adapters/postgres"
 	redisadapter "github.com/SerhanTelatar/notification-engine/internal/adapters/redis"
+	"github.com/SerhanTelatar/notification-engine/internal/adapters/ws"
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/config"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/health"
@@ -78,25 +79,41 @@ func serve(ctx context.Context, log *slog.Logger, cfg config.API) error {
 
 	repo := postgres.NewNotificationRepo(pool)
 	templates := postgres.NewTemplateRepo(pool)
+	// Status events go out through Redis after each commit and come back to every API instance's
+	// WebSocket hub (US9, ADR 0007). Best-effort: Redis being down never fails a request.
+	events := redisadapter.NewStatusBus(rdb, log.With("component", "status"))
+	hub := ws.NewHub(ws.DefaultBuffer)
+
 	creator := app.NewCreator(app.CreatorDeps{
 		Repo: repo, Templates: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: log, MaxAttempts: cfg.MaxAttempts,
-		Events: noop.Broadcaster{}, // Redis fan-out arrives with US9
+		Events: events,
 	})
+	query := app.NewQuery(app.QueryDeps{Repo: repo})
+	batcher := app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(pool), Templates: templates, IDs: noop.UUIDv7{},
+		Clock: noop.Clock{}, Events: events, Log: log, MaxAttempts: cfg.MaxAttempts})
 
 	router := httpapi.NewRouter(log, httpapi.NewServer(httpapi.Deps{Log: log, Health: checker, Creator: creator,
-		Query:     app.NewQuery(app.QueryDeps{Repo: repo}),
+		Query:     query,
 		Templates: app.NewTemplates(app.TemplatesDeps{Repo: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{}, Log: log}),
-		Batcher: app.NewBatcher(app.BatcherDeps{Repo: postgres.NewBatchRepo(pool), Templates: templates, IDs: noop.UUIDv7{}, Clock: noop.Clock{},
-			Events: noop.Broadcaster{}, Log: log, MaxAttempts: cfg.MaxAttempts}),
+		Batcher:   batcher,
 		Canceller: app.NewCanceller(app.CancellerDeps{Repo: repo, Batches: postgres.NewBatchRepo(pool),
-			Events: noop.Broadcaster{}, Clock: noop.Clock{}, Log: log}),
+			Events: events, Clock: noop.Clock{}, Log: log}),
 		Metrics: apiMetrics}), httpapi.WithMetrics(apiMetrics))
 	httpapi.MountOps(router, reg, api.Spec)
+	httpapi.MountWS(router, httpapi.WSDeps{Hub: hub, Query: query, Batches: batcher, Metrics: apiMetrics,
+		Log: log.With("component", "ws")})
 	srv := httpapi.NewHTTPServer(cfg.HTTPAddr, router)
+
+	// The subscriber feeds the hub; when it stops (shutdown), every client is closed with 1001.
+	statusFeed := shutdown.Component{Name: "status-subscriber", Run: func(ctx context.Context) error {
+		defer hub.Shutdown()
+		return events.Run(ctx, hub.Publish)
+	}}
 
 	log.InfoContext(ctx, "api starting", "addr", cfg.HTTPAddr, "max_attempts", cfg.MaxAttempts)
 	err = shutdown.Run(ctx, log, cfg.ShutdownTimeout,
 		shutdown.HTTPServer("http", srv, cfg.ShutdownTimeout),
+		statusFeed,
 	)
 	log.InfoContext(context.WithoutCancel(ctx), "api stopped")
 	return err
