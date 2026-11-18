@@ -49,7 +49,7 @@ green.
   - `depguard` rules so `internal/domain` imports only the stdlib
   - `internal/app` and `internal/ports` must not import `internal/adapters` or
     `internal/platform` (plan, Constitution II)
-- [ ] T004 [P] Create `.env.example` listing every variable and default from R19, including
+- [X] T004 [P] Create `.env.example` listing every variable and default from R19, including
   `RELAY_MAX_INFLIGHT_PER_CHANNEL=1000`, `BREAKER_MAX_DEFER_AGE=1h` and `LIMITER_MAX_WAIT=30s`.
 - [ ] T005 [P] Create a multi-stage `Dockerfile` that builds `api`, `worker` and `mockprovider`
   into one distroless image; the binary is chosen by the container command (plan, Project
