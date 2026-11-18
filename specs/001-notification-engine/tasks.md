@@ -713,7 +713,7 @@ correlation-id grep and readiness behave as in quickstart #12, #14, #15 and #18.
   every request either got 202 with a durable row or failed with no row stored (SC-004,
   US1-AS11).
 
-- [ ] T091 [P] [US7] Write unit tests for the backlog sampler in `internal/app/sampler_test.go`:
+- [X] T091 [P] [US7] Write unit tests for the backlog sampler in `internal/app/sampler_test.go`:
   repository counts map to `notification_backlog{channel,priority,status}` gauge values via the
   recorder fake; combinations that vanish are reset to 0; a broker-depth error doesn't stop the
   DB-based gauges.

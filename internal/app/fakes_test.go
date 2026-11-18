@@ -512,8 +512,10 @@ func (b *recBroadcaster) statuses(id string) []domain.Status {
 // --- Metrics --------------------------------------------------------------------------------
 
 type recMetrics struct {
-	mu     sync.Mutex
-	counts map[string]int
+	mu      sync.Mutex
+	counts  map[string]int
+	backlog []ports.BacklogCount // last Backlog call
+	depths  map[string]int       // last QueueDepth per queue
 }
 
 func newMetrics() *recMetrics { return &recMetrics{counts: map[string]int{}} }
@@ -547,7 +549,20 @@ func (m *recMetrics) RelayPublished(ch domain.Channel, n int) {
 }
 func (m *recMetrics) RelaySkipped(ch domain.Channel) { m.inc("relay_skipped:"+string(ch), 1) }
 func (m *recMetrics) Reaped(kind string, n int)      { m.inc("reaped:"+kind, n) }
-func (m *recMetrics) Backlog([]ports.BacklogCount)   {}
+func (m *recMetrics) Backlog(c []ports.BacklogCount) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.backlog = append([]ports.BacklogCount(nil), c...)
+}
+
+func (m *recMetrics) QueueDepth(queue string, n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.depths == nil {
+		m.depths = map[string]int{}
+	}
+	m.depths[queue] = n
+}
 
 // --- Logs -----------------------------------------------------------------------------------
 
