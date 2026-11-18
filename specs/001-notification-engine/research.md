@@ -20,6 +20,12 @@ implementation (Constitution I).
   versions, and reviewers can run everything with only Docker installed.
 - **Alternatives**: a `tools.go` blank-import file (the old pattern, replaced by `tool`
   directives); asking reviewers to install the tools by hand (more friction, version drift).
+- **Amendment (T001)**: only `oapi-codegen` (v2.8.2) is a `tool` directive. `sqlc` (1.31.1) and
+  `golangci-lint` (v2.15.0) run from their pinned official Docker images, both in the Makefile
+  and in CI. golangci-lint's own docs advise against installing it through `go.mod`, because its
+  dependencies would mix with the module's. sqlc needs cgo and would pull a large dependency tree
+  into `go.mod`. `goose` is used as a library by `api migrate`, so it needs no CLI. The Go
+  toolchain is pinned to `go 1.27.4` (image `golang:1.27.4`).
 
 ## R2. Process topology
 

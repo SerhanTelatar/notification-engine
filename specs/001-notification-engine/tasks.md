@@ -35,7 +35,7 @@ green.
 
 **Purpose**: Repository scaffolding, toolchain, contract promotion and CI (plan phase A).
 
-- [ ] T001 Initialise `go.mod`:
+- [X] T001 Initialise `go.mod`:
   - module `github.com/SerhanTelatar/notification-engine`
   - `go` and `toolchain` directives set to the latest stable Go
   - `tool` directives for oapi-codegen, sqlc, goose and golangci-lint (R1)
