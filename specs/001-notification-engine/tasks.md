@@ -903,7 +903,7 @@ including transitions made by the worker.
   - send the snapshot, then 30 s pings with a 10 s pong timeout (`contracts/events.md` §3)
   - `ws_connections` gauge
   - makes T110 pass
-- [ ] T114 [US9] Replace the noop broadcaster with the Redis broadcaster in `cmd/api/main.go` and
+- [X] T114 [US9] Replace the noop broadcaster with the Redis broadcaster in `cmd/api/main.go` and
   `cmd/worker/main.go`. Start the subscriber → hub loop in the api and mount `/ws`; close clients
   on shutdown. Makes T111 pass.
 - [ ] T115 [P] [US9] Write `specs/adr/0007-realtime-fanout-via-redis-pubsub.md` from R11:
