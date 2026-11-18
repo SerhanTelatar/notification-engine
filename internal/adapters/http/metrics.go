@@ -9,12 +9,16 @@ import (
 	"github.com/SerhanTelatar/notification-engine/internal/app"
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/metrics"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/tracing"
 )
 
 // RouterOption configures NewRouter.
 type RouterOption func(*routerConfig)
 
-type routerConfig struct{ metrics *metrics.API }
+type routerConfig struct {
+	metrics *metrics.API
+	tracing *tracing.Tracing
+}
 
 // WithMetrics records http_request_duration_seconds for every request.
 func WithMetrics(m *metrics.API) RouterOption {

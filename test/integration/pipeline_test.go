@@ -127,13 +127,19 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 	if err := rabbitmq.DeclareTopology(conn); err != nil {
 		t.Fatal(err)
 	}
+	var mqOpts []rabbitmq.Option
+	var providerOpts []provider.ClientOption
+	if cfg.tracing != nil {
+		mqOpts = append(mqOpts, rabbitmq.WithTracing(cfg.tracing))
+		providerOpts = append(providerOpts, provider.WithTracing(cfg.tracing))
+	}
 	p := &pipeline{t: t, conn: conn, repo: postgres.NewNotificationRepo(env.Pool),
-		pub: rabbitmq.NewPublisher(conn, 0), metrics: newCountingMetrics()}
+		pub: rabbitmq.NewPublisher(conn, 0, mqOpts...), metrics: newCountingMetrics()}
 	p.creator = app.NewCreator(app.CreatorDeps{Repo: p.repo, IDs: noop.UUIDv7{}, Clock: noop.Clock{},
 		Events: events, Log: quietLog, MaxAttempts: 5})
 
 	deliverer := app.NewDeliverer(app.DelivererDeps{
-		Repo: p.repo, Provider: provider.NewClient(cfg.providerURL, cfg.providerTimeout, nil),
+		Repo: p.repo, Provider: provider.NewClient(cfg.providerURL, cfg.providerTimeout, nil, providerOpts...),
 		Breaker: breakerOrNoop(cfg.breaker), Limiter: limiterOrNoop(cfg.limiter), MaxDeferAge: cfg.maxDeferAge, Events: events, Metrics: p.metrics,
 		Clock: noop.Clock{}, Log: quietLog, BackoffBase: cfg.backoffBase, BackoffMax: cfg.backoffMax,
 		LimiterMaxWait: durationOr(cfg.limiterMaxWait, time.Second), SendOffset: cfg.sendOffset,
@@ -170,7 +176,7 @@ func startPipeline(t testing.TB, cfg pipelineConfig) *pipeline {
 	}
 	every(cfg.reaperInterval, reaper.Tick)
 	for _, ch := range domain.Channels {
-		c := rabbitmq.NewConsumer(conn, ch, cfg.concurrency, deliverer.Handle, quietLog)
+		c := rabbitmq.NewConsumer(conn, ch, cfg.concurrency, deliverer.Handle, quietLog, mqOpts...)
 		run(func(ctx context.Context) {
 			if err := c.Run(ctx); err != nil {
 				t.Errorf("consumer %s: %v", ch, err)

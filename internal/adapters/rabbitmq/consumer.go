@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
 	"github.com/SerhanTelatar/notification-engine/internal/platform/logger"
@@ -24,12 +26,13 @@ type Consumer struct {
 	concurrency int
 	handle      ports.MessageHandler
 	log         *slog.Logger
+	opts        options
 }
 
 // NewConsumer returns a consumer for ch's queue.
-func NewConsumer(conn *amqp.Connection, ch domain.Channel, concurrency int, handle ports.MessageHandler, log *slog.Logger) *Consumer {
+func NewConsumer(conn *amqp.Connection, ch domain.Channel, concurrency int, handle ports.MessageHandler, log *slog.Logger, opts ...Option) *Consumer {
 	return &Consumer{conn: conn, channel: ch, concurrency: max(1, concurrency), handle: handle,
-		log: log.With("component", "consumer", "channel", string(ch))}
+		log: log.With("component", "consumer", "channel", string(ch)), opts: applyOptions(opts)}
 }
 
 // Run consumes until ctx is cancelled, then stops taking deliveries and waits for in-flight
@@ -83,6 +86,11 @@ func (c *Consumer) Run(ctx context.Context) error {
 func (c *Consumer) handleDelivery(ctx context.Context, d amqp.Delivery) {
 	correlationID, _ := d.Headers[HeaderCorrelationID].(string)
 	ctx = logger.WithCorrelationID(ctx, correlationID)
+	ctx, span := c.opts.deliverSpan(ctx, string(c.channel), d)
+	if span != nil {
+		defer span.End()
+		span.SetAttributes(attribute.String("correlation_id", correlationID))
+	}
 
 	msg, err := decode(d.Body, correlationID)
 	if err == nil && msg.Channel != c.channel {
@@ -90,12 +98,19 @@ func (c *Consumer) handleDelivery(ctx context.Context, d amqp.Delivery) {
 	}
 	if err != nil {
 		c.log.ErrorContext(ctx, "poison message dead-lettered", "message_id", d.MessageId, "error", err)
+		if span != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "poison message")
+		}
 		c.settle(ctx, d, ports.DecisionDeadLetter)
 		return
 	}
 	ctx = logger.WithNotificationID(ctx, msg.NotificationID)
 
 	decision := c.safeHandle(ctx, msg)
+	if span != nil {
+		span.SetAttributes(attribute.String("notification_id", msg.NotificationID), attribute.String("decision", decision.String()))
+	}
 	c.settle(ctx, d, decision)
 }
 

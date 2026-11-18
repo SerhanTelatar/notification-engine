@@ -14,7 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/SerhanTelatar/notification-engine/internal/domain"
+	"github.com/SerhanTelatar/notification-engine/internal/platform/tracing"
 	"github.com/SerhanTelatar/notification-engine/internal/ports"
 )
 
@@ -44,11 +47,11 @@ var _ ports.Provider = (*Client)(nil)
 
 // NewClient returns a client for endpoint. Every call is bounded by timeout (FR-023), and
 // redirects aren't followed, so a 3xx is classified as permanent.
-func NewClient(endpoint string, timeout time.Duration, observe ObserveFunc) *Client {
+func NewClient(endpoint string, timeout time.Duration, observe ObserveFunc, opts ...ClientOption) *Client {
 	if observe == nil {
 		observe = func(domain.Channel, domain.Outcome, time.Duration) {}
 	}
-	return &Client{
+	c := &Client{
 		url:     endpoint,
 		timeout: timeout,
 		observe: observe,
@@ -59,6 +62,10 @@ func NewClient(endpoint string, timeout time.Duration, observe ObserveFunc) *Cli
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // newTransport keeps enough idle connections for every concurrent consumer. The default of two
@@ -171,4 +178,22 @@ func snippet(body []byte, secrets ...string) string {
 		s = s[:errorSnippetBytes] + "…"
 	}
 	return ": " + s
+}
+
+// ClientOption configures a Client.
+type ClientOption func(*Client)
+
+// WithTracing records a client span per provider call ("provider send") and sends the W3C
+// traceparent header, so a provider that traces joins the notification's trace (bonus, T117).
+func WithTracing(t *tracing.Tracing) ClientOption {
+	return func(c *Client) {
+		if !t.Enabled() {
+			return
+		}
+		c.http.Transport = otelhttp.NewTransport(c.http.Transport,
+			otelhttp.WithTracerProvider(t.Provider()),
+			otelhttp.WithPropagators(t.Propagator()),
+			otelhttp.WithSpanNameFormatter(func(string, *http.Request) string { return "provider send" }),
+		)
+	}
 }
