@@ -61,10 +61,11 @@ constitution it must never be a source of truth.
   - An event can be missed (during an outage or after an overflow), which is why the snapshot
     exists.
   - A change committed between subscribing and reading the snapshot may appear in both.
-  - Events from different processes can arrive slightly out of order: for example, a worker's
-    `queued` racing an API-side `cancelled`. Ordering per notification is only as strong as the
-    pub/sub delivery order across publishers. The `at` field and the snapshot let clients
-    reconcile.
+  - Events can arrive out of order, even from one process. The relay announces `queued` after
+    its commit, and by then a consumer may already have claimed the row and announced `sending`.
+    Across processes, a worker's `queued` can race an API-side `cancelled`. Publishes go out
+    concurrently on pooled connections, so there's no ordering per notification. The `at` field,
+    the `from`/`to` pair and the snapshot let clients reconcile; the latest `at` wins.
 - No durable fan-out state exists anywhere. Restarting an API instance just drops its sockets
   (1001), and the clients reconnect.
 

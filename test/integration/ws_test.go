@@ -139,21 +139,25 @@ func TestWSNotificationSubscriptionSeesWorkerTransitions(t *testing.T) {
 		t.Fatalf("snapshot %v", snap)
 	}
 
-	var got []string
-	for _, want := range []string{"queued", "sending", "sent"} {
+	// Every transition arrives within 1 s of its commit (SC-010). Their order isn't guaranteed:
+	// the relay announces "queued" after its commit, by which time a consumer may already have
+	// claimed the row and announced "sending" (ADR 0007).
+	got := map[string]bool{}
+	for len(got) < 3 {
 		m := readMsg(t, c, 10*time.Second)
 		received := time.Now()
 		at, err := time.Parse(time.RFC3339Nano, m["at"].(string))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if m["type"] != "status" || m["notification_id"] != id || m["to"] != want {
-			t.Fatalf("message %v, want status %s (so far %v)", m, want, got)
+		to, _ := m["to"].(string)
+		if m["type"] != "status" || m["notification_id"] != id || (to != "queued" && to != "sending" && to != "sent") {
+			t.Fatalf("message %v (so far %v)", m, got)
 		}
 		if lag := received.Sub(at); lag > time.Second {
-			t.Fatalf("%s arrived %v after the commit, want ≤ 1 s (SC-010)", want, lag)
+			t.Fatalf("%s arrived %v after the commit, want ≤ 1 s (SC-010)", to, lag)
 		}
-		got = append(got, want)
+		got[to] = true
 	}
 }
 
