@@ -36,7 +36,7 @@ func TestParsePriority(t *testing.T) {
 }
 
 func TestPriorityOrderingAndStorage(t *testing.T) {
-	if !(PriorityHigh > PriorityNormal && PriorityNormal > PriorityLow) {
+	if PriorityHigh <= PriorityNormal || PriorityNormal <= PriorityLow {
 		t.Fatal("higher priority must sort higher (relay ORDER BY priority DESC)")
 	}
 	for _, n := range []int16{1, 2, 3} {

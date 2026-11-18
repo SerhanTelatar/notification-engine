@@ -57,7 +57,7 @@ func NewMockProvider(t testing.TB) *MockProvider {
 }
 
 // URL of the send endpoint.
-func (m *MockProvider) SendURL() string { return m.Server.URL + "/send" }
+func (m *MockProvider) SendURL() string { return m.URL + "/send" }
 
 // SetScript replaces the response script.
 func (m *MockProvider) SetScript(s Script) {

@@ -89,7 +89,7 @@ func Run(ctx context.Context, log *slog.Logger, timeout time.Duration, comps ...
 // waits up to drain for in-flight requests (http.Server.Shutdown).
 func HTTPServer(name string, srv *http.Server, drain time.Duration) Component {
 	return Component{Name: name, Run: func(ctx context.Context) error {
-		ln, err := net.Listen("tcp", srv.Addr)
+		ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", srv.Addr)
 		if err != nil {
 			return fmt.Errorf("listen %s: %w", srv.Addr, err)
 		}

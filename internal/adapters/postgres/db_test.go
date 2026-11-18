@@ -45,7 +45,7 @@ func TestTranslate(t *testing.T) {
 					t.Fatalf("constraint lost: %v", got)
 				}
 			}
-			if errors.Is(got, domain.ErrNotFound) && tc.wantIs != domain.ErrNotFound {
+			if errors.Is(got, domain.ErrNotFound) && !errors.Is(tc.wantIs, domain.ErrNotFound) {
 				t.Fatal("must not invent not-found")
 			}
 		})

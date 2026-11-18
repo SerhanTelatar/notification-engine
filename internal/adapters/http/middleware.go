@@ -28,18 +28,23 @@ const RequestTimeout = 25 * time.Second
 func Recover(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer func() {
-				if p := recover(); p != nil {
-					if p == http.ErrAbortHandler { //nolint:errorlint // sentinel compared by identity, as net/http does
-						panic(p)
-					}
-					log.ErrorContext(r.Context(), "panic serving request", "panic", p, "stack", string(debug.Stack()))
-					writeJSONError(w, http.StatusInternalServerError, "internal", "internal server error")
-				}
-			}()
+			defer recoverPanic(r.Context(), log, w)
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// recoverPanic is deferred by Recover. http.ErrAbortHandler is re-raised, as net/http expects.
+func recoverPanic(ctx context.Context, log *slog.Logger, w http.ResponseWriter) {
+	p := recover()
+	if p == nil {
+		return
+	}
+	if p == http.ErrAbortHandler { //nolint:errorlint // sentinel compared by identity, as net/http does
+		panic(p)
+	}
+	log.ErrorContext(ctx, "panic serving request", "panic", p, "stack", string(debug.Stack()))
+	writeJSONError(w, http.StatusInternalServerError, CodeInternal, "internal server error")
 }
 
 // CorrelationID reads X-Correlation-ID or generates one, stores it in the request context (so
