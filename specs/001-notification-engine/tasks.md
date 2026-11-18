@@ -106,7 +106,7 @@ needs.
   - `NewRegistry()` plus constructors `NewAPIMetrics(reg)` and `NewWorkerMetrics(reg)`
   - define every collector, name, label and bucket listed in `contracts/observability.md`
   - nothing global; the registry is injected
-- [ ] T017 [P] Implement health checks in `internal/platform/health/health.go`:
+- [X] T017 [P] Implement health checks in `internal/platform/health/health.go`:
   - a `Checker` with required and optional dependencies, 1 s timeout per check
   - JSON output per the `Health` schema in `api/openapi.yaml`
   - a liveness handler that never touches dependencies
