@@ -63,8 +63,53 @@ works. A single worker usually gets 9090, but a restart can move it;
 `docker compose port --index N worker 9090` shows where each replica landed.
 
 `make demo-burst` submits 5,000 mixed-priority SMS in batches. You can watch them drain at about
-92/s at the mock provider. To use webhook.site instead of the mock, set
-`PROVIDER_URL=https://webhook.site/<uuid>` in `.env` and restart the worker.
+92/s at the mock provider.
+
+### Using webhook.site as the provider
+
+The stack delivers to a built-in mock provider by default, which can also simulate failures (see
+[its contract](specs/001-notification-engine/contracts/provider.md)). To deliver to
+[webhook.site](https://webhook.site) instead, as the assessment describes:
+
+1. Open https://webhook.site and copy your unique URL.
+2. Under **Edit**, set the default response:
+   - status `202`;
+   - content type `application/json`;
+   - body: `{"messageId": "3f6c2a1e-8d4b-4c7a-9e21-5b0f7d9a1c33", "status": "accepted", "timestamp": "2026-11-19T10:00:00Z"}`.
+3. Point the worker at it and restart the worker:
+
+   ```bash
+   echo "PROVIDER_URL=https://webhook.site/<your-uuid>" >> .env
+   docker compose up -d worker
+   ```
+4. Send a notification (see [API examples](#api-examples)). webhook.site shows the request:
+
+   ```http
+   POST /<your-uuid>
+   Content-Type: application/json
+   Idempotency-Key: <notification id>
+   X-Correlation-ID: <correlation id>
+
+   {"to":"+905551234567","channel":"sms","content":"Your message"}
+   ```
+
+   `GET /api/v1/notifications/{id}` then shows `sent`, with the `messageId` from your configured
+   response as `provider_message_id`.
+
+**Verified against webhook.site** (2026-11-19):
+- An SMS, an email, a push and a 3-item batch were all sent with HTTP 202, and the configured
+  `messageId` was stored.
+- With webhook.site's unconfigured default (`200`, an HTML body), notifications are still sent,
+  because any 2xx is success. `provider_message_id` is then empty, and the worker logs
+  `provider accepted without a parsable message id`.
+- The first request to a brand-new webhook.site URL took longer than `PROVIDER_TIMEOUT` (5 s).
+  It was recorded as a transient attempt, and the retry delivered it 7 s later.
+- Each call took about 450 ms over the internet, against about 20 ms for the mock. Each delivery
+  holds a consumer for the whole call, so 20 consumers per channel give at most about 44 per
+  second per worker. That's below the 100/s limit. For high rates against a slow provider, raise
+  `CONSUMER_CONCURRENCY_PER_CHANNEL` (about 50 for 100/s at 450 ms) or add workers.
+- Keep burst demos (`make demo-burst`) on the mock: webhook.site is a shared public service, not
+  a load-test target.
 
 ## Architecture
 
@@ -360,6 +405,7 @@ variable with its default.
 
 ```bash
 make test        # unit + integration with -race; integration uses testcontainers (needs Docker)
+DOCKER=1 make test  # the same, with Go running in the pinned golang image: only Docker needed
 make test-unit   # unit tests only
 make lint        # golangci-lint v2 (pinned image), including depguard layering rules
 make gen-check   # generated HTTP/DB code matches api/openapi.yaml and sql/queries
@@ -388,6 +434,10 @@ make loadtest    # 10,000 creates with vegeta against the running stack (p50/p95
   - the metrics summary on seeded data.
 - **`deploy/dashboard_test.go`** checks that the Grafana dashboard queries only metrics listed in
   `contracts/observability.md`.
+- **Without a local Go toolchain**: prefix any Go target with `DOCKER=1` (`DOCKER=1 make test`,
+  `DOCKER=1 make test-unit`). The toolchain then runs in the pinned `golang:1.27.4` image, with the
+  Docker socket mounted for testcontainers. This was checked with Go removed from `PATH`: the full
+  suite passes.
 - **CI** (GitHub Actions) runs lint, gen-check, unit and integration tests, and the image build
   on every pull request and on pushes to `main`. Merges to `main` require green CI.
 
