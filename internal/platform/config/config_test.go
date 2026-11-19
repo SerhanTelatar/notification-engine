@@ -25,7 +25,7 @@ func TestLoadWorkerDefaults(t *testing.T) {
 		{"BreakerMaxDeferAge", c.BreakerMaxDeferAge, time.Hour},
 		{"LimiterMaxWait", c.LimiterMaxWait, 30 * time.Second},
 		{"RateLimitSendOffset", c.RateLimitSendOffset, 50 * time.Millisecond},
-		{"RateLimitHeadroom", c.RateLimitHeadroom, 0.05},
+		{"RateLimitHeadroom", c.RateLimitHeadroom, 0.08},
 		{"RelayInterval", c.RelayInterval, 200 * time.Millisecond},
 		{"ProviderTimeout", c.ProviderTimeout, 5 * time.Second},
 		{"ReaperQueuedTimeout", c.ReaperQueuedTimeout, 15 * time.Minute},

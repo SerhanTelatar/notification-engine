@@ -90,7 +90,7 @@ func LoadWorker(env Lookup) (Worker, error) {
 
 		RateLimitPerSecond:  r.integer("RATE_LIMIT_PER_SECOND", 100, 1, 100000),
 		RateLimitSendOffset: r.duration("RATE_LIMIT_SEND_OFFSET", 50*time.Millisecond),
-		RateLimitHeadroom:   r.fraction("RATE_LIMIT_HEADROOM", 0.05, 0, 0.5),
+		RateLimitHeadroom:   r.fraction("RATE_LIMIT_HEADROOM", 0.08, 0, 0.5),
 		LimiterMaxWait:      r.duration("LIMITER_MAX_WAIT", 30*time.Second),
 		BackoffBase:         r.duration("BACKOFF_BASE", time.Second),
 		BackoffMax:          r.duration("BACKOFF_MAX", 5*time.Minute),
