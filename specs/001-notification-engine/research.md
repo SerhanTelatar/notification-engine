@@ -235,7 +235,8 @@ implementation (Constitution I).
     goes back to `retrying` without an attempt. Peak dropped to 101–103.
   - **Connection pool**: the provider client keeps 256 idle connections per host. The default
     of 2 made most calls dial, adding variable latency between slot and arrival.
-  - **Headroom** (`RATE_LIMIT_HEADROOM`, default 0.05): slots are spaced `T × 1.05`, about
+  - **Headroom** (`RATE_LIMIT_HEADROOM`, default 0.05 here; raised to 0.08 on 2026-11-19, see
+    ADR 0004 "Headroom raised to 8%"): slots are spaced `T × 1.05`, about
     95/s at a limit of 100. Even then, millisecond CPU and network jitter on a loaded host left 1–3
     extra arrivals per second, because a 10 ms slot leaves no room for jitter. With 5% headroom it
     would take about 50 ms of jitter to exceed the limit. Measured peak: **96–98**. Sustained rate
@@ -436,7 +437,7 @@ implementation (Constitution I).
 | `PROVIDER_TIMEOUT` | `5s` | worker |
 | `RATE_LIMIT_PER_SECOND` | `100` | worker |
 | `RATE_LIMIT_SEND_OFFSET` | `50ms` | worker |
-| `RATE_LIMIT_HEADROOM` | `0.05` | worker |
+| `RATE_LIMIT_HEADROOM` | `0.08` (was 0.05; ADR 0004) | worker |
 | `MAX_ATTEMPTS` | `5` | api (stamped per row) |
 | `BACKOFF_BASE` / `BACKOFF_MAX` | `1s` / `5m` | worker |
 | `BREAKER_CONSECUTIVE_FAILURES` / `BREAKER_COOLDOWN` | `5` / `30s` | worker |

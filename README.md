@@ -63,7 +63,7 @@ works. A single worker usually gets 9090, but a restart can move it;
 `docker compose port --index N worker 9090` shows where each replica landed.
 
 `make demo-burst` submits 5,000 mixed-priority SMS in batches. You can watch them drain at about
-95/s at the mock provider. To use webhook.site instead of the mock, set
+92/s at the mock provider. To use webhook.site instead of the mock, set
 `PROVIDER_URL=https://webhook.site/<uuid>` in `.env` and restart the worker.
 
 ## Architecture
@@ -152,7 +152,7 @@ sqlc. CI fails if the generated code drifts.
 | [0001](specs/adr/0001-rabbitmq-over-kafka-and-postgres-queue.md) | RabbitMQ for work dispatch, rather than Kafka or a Postgres-only queue: native priority queues, per-message acks, DLX |
 | [0002](specs/adr/0002-transactional-outbox-in-notifications-table.md) | The `notifications` table is the transactional outbox. The relay publishes with confirms inside its transaction and applies backpressure at 1,000 queued rows per channel |
 | [0003](specs/adr/0003-at-least-once-with-idempotency.md) | At-least-once delivery, made effectively once with idempotency keys (payload-hash conflicts → 409) and guarded state transitions |
-| [0004](specs/adr/0004-redis-gcra-rate-limiter.md) | Distributed rate limiting with GCRA in a Redis Lua script; calls are paced on their slot; 5% headroom |
+| [0004](specs/adr/0004-redis-gcra-rate-limiter.md) | Distributed rate limiting with GCRA in a Redis Lua script; calls are paced on their slot; 8% headroom |
 | [0005](specs/adr/0005-retry-backoff-and-circuit-breaker.md) | Full-jitter exponential backoff with Retry-After, per-channel circuit breakers, deferral without using attempts, and the `BREAKER_MAX_DEFER_AGE` cap |
 | [0006](specs/adr/0006-keyset-pagination.md) | Keyset pagination on `(created_at, id)` with an opaque cursor |
 | [0007](specs/adr/0007-realtime-fanout-via-redis-pubsub.md) | Real-time status updates: publish after commit to Redis pub/sub; every API instance fans out to its WebSocket clients; best-effort, with a snapshot on connect |
@@ -206,15 +206,20 @@ would race. `make migrate` runs the same command against the stack.
 - **Templates are fields-only.** There are no conditionals, loops or formatting helpers. In
   exchange, a send names every missing variable at once, a template can't loop or run functions,
   and output stays bounded. ([ADR 0008](specs/adr/0008-restricted-templates.md))
-- **Rate-limit headroom: `RATE_LIMIT_HEADROOM=0.05`, kept deliberately.**
-  - Slots are spaced 5% wider than `1s / RATE_LIMIT_PER_SECOND`, about 95/s per channel at a limit
-    of 100. That's still inside SC-003's 90–100 band.
-  - **Gain**: at 100/s a slot is only 10 ms, so a few milliseconds of CPU or network jitter adds an
-    extra arrival to a sliding second. Measured at the provider on the Compose stack, the peak was
-    101–103 per second without headroom and 96–98 with it. Headroom raises the jitter needed to
-    break the limit from about 10 ms to about 50 ms.
-  - **Cost**: about 5% of throughput. Every call also starts `RATE_LIMIT_SEND_OFFSET` (50 ms)
-    after its slot, to cover the claim.
+- **Rate-limit headroom: `RATE_LIMIT_HEADROOM=0.08`.**
+  - Slots are spaced 8% wider than `1s / RATE_LIMIT_PER_SECOND`, about 92.5/s per channel at a
+    limit of 100, inside SC-003's 90–100 band.
+  - **Why it exists**: at 100/s a slot is only 10 ms, so a few milliseconds of CPU or network
+    jitter adds an extra arrival to a sliding second. Measured at the provider on the Compose
+    stack, the peak was 101–103 per second without headroom.
+  - **Why 8%, not 5%**: 5% (about 50 ms of absorbed jitter per second) gave peaks of 96–98, but
+    exactly **100** twice once Prometheus, Grafana and Jaeger also ran on the host. At 8% (about
+    80 ms) the same loaded stack peaked at **94–96** over 7 bursts with one and two workers.
+  - **Cost**: about 8% of throughput, and the margin moves to the lower bound. The steady rate
+    is about 92.5/s, individual seconds dipped to 88, and one two-worker burst averaged 89.8/s
+    including its ramp-up and drain. Exceeding the provider's limit is the worse failure, so the
+    margin goes there; 0.06–0.07 is the middle ground if throughput matters more. Every call
+    also starts `RATE_LIMIT_SEND_OFFSET` (50 ms) after its slot, to cover the claim.
   - `0` gives exact spacing. It held at 20/s in the integration tests, but not on a loaded host
     at 100/s. ([ADR 0004](specs/adr/0004-redis-gcra-rate-limiter.md))
 - **A broker outage pauses delivery, not the worker.** A supervisor redials RabbitMQ with backoff
@@ -263,7 +268,8 @@ three bugs that unit tests with fakes could not.
    - **The cause**: claim latency between the permit and the call, plus connection setup and host
      jitter.
    - **The fix**: pace each call on its slot plus a constant offset, size the provider connection
-     pool, and add the 5% headroom above. The measured peak became 96–98.
+     pool, and add 5% headroom. The measured peak became 96–98. (The headroom was later raised to
+     8% after a busier host reached exactly 100; see the trade-offs above.)
    - **Lesson**: measure a limit where the spec measures it, at the provider, not where the code
      enforces it.
 
@@ -335,7 +341,7 @@ variable with its default.
 | `PROVIDER_TIMEOUT` | `5s` | Per-call timeout |
 | `RATE_LIMIT_PER_SECOND` | `100` | Per channel, across all workers |
 | `RATE_LIMIT_SEND_OFFSET` | `50ms` | Calls start at slot + offset (covers the claim) |
-| `RATE_LIMIT_HEADROOM` | `0.05` | Slots spaced 5% wider than `1s/limit` |
+| `RATE_LIMIT_HEADROOM` | `0.08` | Slots spaced 8% wider than `1s/limit` (about 92.5/s at 100) |
 | `LIMITER_MAX_WAIT` | `30s` | Without a permit by then, the message is requeued |
 | `BACKOFF_BASE` / `BACKOFF_MAX` | `1s` / `5m` | Full-jitter exponential backoff |
 | `BREAKER_CONSECUTIVE_FAILURES` | `5` | Transient failures that trip a channel's breaker |
