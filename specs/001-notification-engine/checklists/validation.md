@@ -159,6 +159,9 @@ key.
 - With a port range, Docker assigns any free port in 9090–9099 to each replica, and a restart can
   move it. `docker compose port --index N worker 9090` finds it. README and quickstart.md now say
   so.
+- Later, a fresh clone's single worker landed on 9098, so the README's `localhost:9090` links
+  didn't work. The default is a fixed `9090` again, and the range is opt-in with
+  `WORKER_OPS_PORTS=9090-9099` for scaled runs.
 - Scenarios #16–#18 (templates, WebSocket, metrics summary) belong to the bonus stories and weren't
   run.
 

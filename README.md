@@ -58,9 +58,13 @@ docker compose --profile observability up --build
 | http://localhost:9190 | Prometheus (observability profile) |
 | http://localhost:16686 | Jaeger traces (observability profile, with the OTLP endpoint set) |
 
-Workers publish their ops port from the range 9090–9099, so `docker compose up --scale worker=2`
-works. A single worker usually gets 9090, but a restart can move it;
-`docker compose port --index N worker 9090` shows where each replica landed.
+The worker's ops port is published on 9090. To run several workers, give each replica its own
+port from a range:
+
+```bash
+WORKER_OPS_PORTS=9090-9099 docker compose up --scale worker=2
+docker compose port --index 2 worker 9090   # where replica 2 landed
+```
 
 `make demo-burst` submits 5,000 mixed-priority SMS in batches. You can watch them drain at about
 92/s at the mock provider.
