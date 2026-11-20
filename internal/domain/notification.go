@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -78,6 +79,15 @@ func NewNotification(d Draft, id string, now time.Time, maxAttempts int) (*Notif
 		}
 		if msg := ValidateContent(ch, d.Content); msg != "" {
 			verr.Add("content", msg)
+		}
+	} else {
+		// Without a channel the per-channel rules can't run, but required-ness doesn't depend
+		// on the channel, so blank fields are still reported alongside the channel error.
+		if strings.TrimSpace(d.Recipient) == "" {
+			verr.Add("recipient", "is required and must not be blank")
+		}
+		if strings.TrimSpace(d.Content) == "" {
+			verr.Add("content", "is required and must not be blank")
 		}
 	}
 	if msg := ValidateIdempotencyKey(d.IdempotencyKey); msg != "" {
