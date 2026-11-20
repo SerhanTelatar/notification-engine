@@ -1,14 +1,50 @@
-# One-command local stack: `docker compose up --build`.
-# Binaries read configuration from the environment; the defaults in .env.example match the
-# service names below, so a .env file is optional.
+# One-command local stack: `docker compose up` (Compose v2) or `docker-compose up` (v1.29+).
+#
+# Configuration: each variable below is passed through from .env (or the shell) when set, and
+# left empty otherwise. The binaries treat an empty variable as unset and use their built-in
+# defaults, which .env.example lists and which match the service names below, so a .env file is
+# optional. Interpolation is used instead of `env_file` because Compose v1 has no optional
+# env_file, and it reads .env for interpolation whether or not the file exists.
 
 x-app: &app
   image: notification-engine:local
   build: .
-  env_file:
-    - path: .env
-      required: false
   restart: unless-stopped
+  environment:
+    # Shared
+    DATABASE_URL: ${DATABASE_URL:-}
+    REDIS_ADDR: ${REDIS_ADDR:-}
+    LOG_LEVEL: ${LOG_LEVEL:-}
+    SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    # API
+    HTTP_ADDR: ${HTTP_ADDR:-}
+    MAX_ATTEMPTS: ${MAX_ATTEMPTS:-}
+    # Worker
+    OPS_ADDR: ${OPS_ADDR:-}
+    AMQP_URL: ${AMQP_URL:-}
+    PROVIDER_URL: ${PROVIDER_URL:-}
+    PROVIDER_TIMEOUT: ${PROVIDER_TIMEOUT:-}
+    RATE_LIMIT_PER_SECOND: ${RATE_LIMIT_PER_SECOND:-}
+    RATE_LIMIT_SEND_OFFSET: ${RATE_LIMIT_SEND_OFFSET:-}
+    RATE_LIMIT_HEADROOM: ${RATE_LIMIT_HEADROOM:-}
+    LIMITER_MAX_WAIT: ${LIMITER_MAX_WAIT:-}
+    BACKOFF_BASE: ${BACKOFF_BASE:-}
+    BACKOFF_MAX: ${BACKOFF_MAX:-}
+    BREAKER_CONSECUTIVE_FAILURES: ${BREAKER_CONSECUTIVE_FAILURES:-}
+    BREAKER_COOLDOWN: ${BREAKER_COOLDOWN:-}
+    BREAKER_MAX_DEFER_AGE: ${BREAKER_MAX_DEFER_AGE:-}
+    RELAY_INTERVAL: ${RELAY_INTERVAL:-}
+    RELAY_BATCH_SIZE: ${RELAY_BATCH_SIZE:-}
+    RELAY_MAX_INFLIGHT_PER_CHANNEL: ${RELAY_MAX_INFLIGHT_PER_CHANNEL:-}
+    CONSUMER_CONCURRENCY_PER_CHANNEL: ${CONSUMER_CONCURRENCY_PER_CHANNEL:-}
+    REAPER_INTERVAL: ${REAPER_INTERVAL:-}
+    REAPER_SENDING_TIMEOUT: ${REAPER_SENDING_TIMEOUT:-}
+    REAPER_QUEUED_TIMEOUT: ${REAPER_QUEUED_TIMEOUT:-}
+    # Mock provider (contracts/provider.md)
+    MOCK_FAILURE_RATE: ${MOCK_FAILURE_RATE:-}
+    MOCK_LATENCY: ${MOCK_LATENCY:-}
+    MOCK_RETRY_AFTER: ${MOCK_RETRY_AFTER:-}
 
 services:
   postgres:
