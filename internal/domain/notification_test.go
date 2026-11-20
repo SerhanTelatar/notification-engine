@@ -75,8 +75,24 @@ func TestNewNotificationCollectsAllErrors(t *testing.T) {
 
 	// An unknown channel can't check channel rules, but still reports the channel.
 	_, err = NewNotification(Draft{Channel: "fax", Recipient: "x", Content: "y"}, "id", t0, 5)
-	if !errors.As(err, &v) || v.Fields[0].Field != "channel" {
-		t.Fatalf("want channel error, got %v", err)
+	if !errors.As(err, &v) || len(v.Fields) != 1 || v.Fields[0].Field != "channel" {
+		t.Fatalf("want only a channel error, got %v", err)
+	}
+
+	// Blank fields are reported even when the channel is unknown: required-ness doesn't depend
+	// on the channel.
+	_, err = NewNotification(Draft{Channel: "fax", Recipient: " ", Content: ""}, "id", t0, 5)
+	if !errors.As(err, &v) {
+		t.Fatalf("want ValidationError, got %v", err)
+	}
+	got = map[string]bool{}
+	for _, f := range v.Fields {
+		got[f.Field] = true
+	}
+	for _, f := range []string{"channel", "recipient", "content"} {
+		if !got[f] {
+			t.Errorf("missing field error for %s in %v", f, v.Fields)
+		}
 	}
 }
 
