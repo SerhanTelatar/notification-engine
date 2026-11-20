@@ -34,11 +34,13 @@ in [`specs/adr/`](specs/adr/).
 
 ## Quick start
 
-You only need Docker with Compose v2.
+You only need Docker with Compose: v2 (`docker compose`) or v1.29+ (`docker-compose`). Both were
+checked from a clean checkout.
 
 ```bash
 cp .env.example .env          # optional: every value in it is the default
 docker compose up --build     # postgres, rabbitmq, redis, migrate, api, worker, mockprovider
+docker-compose up --build     # the same with Compose v1
 
 # With Prometheus, Grafana and Jaeger. For traces, first set in .env:
 #   OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
@@ -374,7 +376,8 @@ validation error lists every invalid field at once. The full contract is in
 ## Configuration
 
 Everything is read from environment variables. [`.env.example`](.env.example) lists every
-variable with its default.
+variable with its default. In Compose, each variable is passed through from `.env` (or the shell)
+when set; an unset or empty one falls back to the binary's built-in default.
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
