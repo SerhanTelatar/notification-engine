@@ -76,10 +76,11 @@ services:
     <<: *app
     command: ["/app/worker"]
     ports:
-      # /healthz, /readyz, /metrics. A host port range so `--scale worker=N` works: each replica
-      # gets a free port in 9090-9099 (a single worker usually gets 9090). Find them with
-      # `docker compose port --index N worker 9090`.
-      - "9090-9099:9090"
+      # /healthz, /readyz, /metrics on host port 9090. To run several workers, publish a range so
+      # each replica gets its own port: WORKER_OPS_PORTS=9090-9099 docker compose up --scale
+      # worker=2, then `docker compose port --index N worker 9090` shows where each one landed.
+      # (A range is not the default: Docker may pick any free port in it, even for one worker.)
+      - "${WORKER_OPS_PORTS:-9090}:9090"
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,7 +105,7 @@ services:
       - "16686:16686" # Jaeger UI
 
   # Metrics: Prometheus scrapes every api and worker replica (Docker DNS discovery); the UI is on
-  # :9190 because 9090-9099 belong to the workers.
+  # :9190 because 9090 (or 9090-9099 when scaled) belongs to the workers.
   prometheus:
     image: prom/prometheus:v2.55.1
     profiles: [observability]
